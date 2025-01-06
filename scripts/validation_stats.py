@@ -9,17 +9,17 @@ import acbm
 from acbm.config import load_config
 
 
-def print_stats(counts):
-    print("Census count:", counts["census_count"].sum())
+def print_stats(counts, lcol, rcol):
+    print("Census (total):", counts[lcol].sum())
     print(
-        "ACBM count:",
-        counts["acbm_count"].sum(),
+        "ACBM (total):",
+        counts[rcol].sum(),
     )
-    r2 = np.corrcoef(counts["census_count"], counts["acbm_count"])[0, 1] ** 2
+    r2 = np.corrcoef(counts[lcol], counts[rcol])[0, 1] ** 2
     print("The R^2 value is: ", r2)
-    rmse = np.sqrt((counts["census_count"] - counts["acbm_count"]).pow(2).mean())
+    rmse = np.sqrt((counts[lcol] - counts[rcol]).pow(2).mean())
     print("The RMSE value is: ", rmse)
-    mes = (counts["census_count"] - counts["acbm_count"]).abs().mean()
+    mes = (counts[lcol] - counts[rcol]).abs().mean()
     print("The MAE value is: ", mes)
 
 
@@ -35,6 +35,7 @@ def main(id: str):
         config.interim_path / "matching" / "spc_with_nts_trips.parquet"
     ).join(spc.select(["id", "pwkstat"]), on="id", how="left", coalesce=True)
 
+    print("Summary stats for SPC and NTS matched people and activities...")
     print(
         "% of people with a NTS match: {:.1%}".format(
             df.filter(df["nts_hh_id"].is_not_null()).unique("id").shape[0]
@@ -97,8 +98,36 @@ def main(id: str):
         .collect()
     )
 
+    # For no normalization
     both_counts = acbm_matrix.join(census_matrix, on=["ozone", "dzone"])
-    print_stats(both_counts)
+
+    print(both_counts)
+    print("\nStats for counts...")
+    print_stats(both_counts, "census_count", "acbm_count")
+
+    # Total flows (by origin): i.e. the sum over dzones for a given ozone
+    acbm_matrix_norm = acbm_matrix.join(
+        acbm_matrix.select(["ozone", "acbm_count"])
+        .group_by("ozone")
+        .sum()
+        .rename({"acbm_count": "acbm_total"}),
+        on=["ozone"],
+    ).with_columns((pl.col("acbm_count") / pl.col("acbm_total")).alias("acbm_norm"))
+
+    census_matrix_norm = census_matrix.join(
+        census_matrix.select(["ozone", "census_count"])
+        .group_by("ozone")
+        .sum()
+        .rename({"census_count": "census_total"}),
+        on=["ozone"],
+    ).with_columns(
+        (pl.col("census_count") / pl.col("census_total")).alias("census_norm")
+    )
+    both_norms = acbm_matrix_norm.join(census_matrix_norm, on=["ozone", "dzone"])
+
+    print(both_norms)
+    print("\nStats for proportions (by total origin)...")
+    print_stats(both_norms, "census_norm", "acbm_norm")
 
 
 if __name__ == "__main__":
