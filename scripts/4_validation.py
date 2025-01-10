@@ -227,6 +227,8 @@ def main(config_file):
         start_wkt_col="start_location_geometry_wkt",
         end_wkt_col="end_location_geometry_wkt",
         crs_epsg=config.output_crs,
+        detour_factor=1.56,
+        decay_rate=0.0001,
     )
 
     # Plot: Aggregate

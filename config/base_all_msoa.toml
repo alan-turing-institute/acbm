@@ -1,0 +1,78 @@
+[parameters]
+seed = 0
+ # this is used to query poi data from osm and to load in SPC data
+region = "leeds"
+# how many people from the SPC do we want to run the model for? Comment out if you want to run the analysis on the entire SPC populaiton
+number_of_households = 25000
+# "OA21CD": OA level, "MSOA11CD": MSOA level
+zone_id = "MSOA21CD"
+ # Only set to true if you have travel time matrix at the level specified in boundary_geography
+travel_times = false
+boundary_geography = "MSOA"
+# NTS years to use
+nts_years = [2019, 2021, 2022]
+# NTS regions to use
+nts_regions = [
+    'Yorkshire and the Humber',
+    'North West',
+    'North East',
+    'East Midlands',
+    'West Midlands',
+    'East of England',
+    'South East',
+    'South West']
+# nts day of the week to use
+# 1: Monday, 2: Tuesday, 3: Wednesday, 4: Thursday, 5: Friday, 6: Saturday, 7: Sunday
+nts_day_of_week = 3
+# what crs do we want the output to be in? (just add the number, e.g. 3857)
+output_crs = 3857
+
+[matching]
+# for optional and required columns, see the [iterative_match_categorical](https://github.com/Urban-Analytics-Technology-Platform/acbm/blob/ca181c54d7484ebe44706ff4b43c26286b22aceb/src/acbm/matching.py#L110) function
+# Do not add any column not listed below. You can only move a column from optional to require (or vise versa)
+required_columns = [
+    "number_adults",
+    "number_children",
+    "num_pension_age",
+]
+optional_columns = [
+    "number_cars",
+    "rural_urban_2_categories",
+    "employment_status",
+    "tenure_status",
+]
+# What is the maximum number of NTS matches we want for each SPC household?
+n_matches = 10
+
+[feasible_assignment]
+# detour factor when converting euclidian distance to actual travel distance
+detour_factor = 1.56
+# decay rate when converting euclidian to travel distance (0.0001 is a good value)
+# actual_distance = distance * (1 + ((detour_factor - 1) * np.exp(-decay_rate * distance)))
+decay_rate = 0.0001
+
+[work_assignment]
+commute_level = "MSOA"
+# if true, optimization problem will try to minimize percentage difference at OD level (not absolute numbers). Recommended to set it to true
+use_percentages = true
+# weights to add for each objective in the optimization problem
+weight_max_dev = 0.2
+weight_total_dev = 0.8
+# maximum number of feasible zones to include in the optimization problem (less zones makes problem smaller - so faster, but at the cost of a better solution)
+max_zones = 10
+
+[postprocessing]
+pam_jitter = 30
+pam_min_duration = 10
+# for get_pt_subscription: everyone above this age has a subscription (pensioners get free travel)
+# TODO: more sophisticated approach
+pt_subscription_age = 66
+# to define if a person is a student:
+# eveyone below this age is a student
+student_age_base = 16
+# everyone below this age that has at least one "education" activity is a student
+student_age_upper = 30
+# eveyone who uses one of the modes below is classified as a passenger (isPassenger = True)
+modes_passenger =  ['car_passenger', 'taxi']
+# yearly state pension: for getting hhlIncome of pensioners
+state_pension = 11502

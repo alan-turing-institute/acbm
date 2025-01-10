@@ -37,6 +37,13 @@ optional_columns = [
 ]
 n_matches = 10 # What is the maximum number of NTS matches we want for each SPC household?
 
+[feasible_assignment]
+# detour factor when converting euclidian distance to actual travel distance
+detour_factor = 1.56
+# decay rate when converting euclidian to travel distance (0.0001 is a good value)
+# actual_distance = distance * (1 + ((detour_factor - 1) * np.exp(-decay_rate * distance)))
+decay_rate = 0.0001
+
 [work_assignment]
 commute_level = "OA"
 use_percentages = true # if true, optimization problem will try to minimize percentage difference at OD level (not absolute numbers). Recommended to set it to true
