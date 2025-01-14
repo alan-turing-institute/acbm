@@ -2,6 +2,8 @@ import geopandas as gpd
 import pandas as pd
 from shapely import wkt
 
+from acbm.assigning.utils import _adjust_distance
+
 
 def process_sequences(
     df: pd.DataFrame,
@@ -76,6 +78,8 @@ def calculate_od_distances(
     end_wkt_col: str,
     crs_epsg: int,
     projected_epsg: int = 3857,
+    detour_factor: float = 1.56,
+    decay_rate: float = 0.0001,
 ) -> pd.DataFrame:
     """
     Calculate distances between start and end geometries in a DataFrame.
@@ -94,6 +98,11 @@ def calculate_od_distances(
     projected_epsg: int
         EPSG code for the projected CRS (default is 3857). We need a metric crs
         to calculte distances in meters.
+    detour_factor: float
+        Factor to adjust the estimated distance.
+    decay_rate: float
+        Decay rate for the distance adjustment. Detours are a smaller proportion of
+        the direct distance for longer trips.
 
     Returns
     -------
@@ -120,7 +129,17 @@ def calculate_od_distances(
     gdf = gdf.to_crs(epsg=projected_epsg)
     end_gdf = end_gdf.to_crs(epsg=projected_epsg)
 
-    # Calculate the distance between start and end geometries (in km)
-    gdf["distance"] = round(gdf.geometry.distance(end_gdf.geometry) / 1000, 1)
+    # Calculate the distance between start and end geometries (in m)
+    gdf["distance"] = gdf.geometry.distance(end_gdf.geometry)
+
+    # Estimate actual travel distance
+    gdf["distance"] = gdf["distance"].apply(
+        lambda d: _adjust_distance(
+            d, detour_factor=detour_factor, decay_rate=decay_rate
+        )
+    )
+
+    # convert distance to km
+    gdf["distance"] = round(gdf["distance"] / 1000, 1)
 
     return gdf

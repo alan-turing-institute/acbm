@@ -11,6 +11,8 @@ import seaborn as sns
 from matplotlib import patches as mpatches
 from shapely.geometry import LineString
 
+from acbm.assigning.utils import _adjust_distance
+
 
 def plot_workzone_assignment_line(
     assignment_results: pd.DataFrame,
@@ -387,7 +389,10 @@ def plot_scatter_actual_reported(
     title_prefix: str,
     activity_type: str,
     activity_type_col: str,
+    detour_factor: float,
+    decay_rate: float,
     crs: str,
+    x_axis_max: float,
     save_dir: str | Path | None = None,
     display: bool = False,
     y_scale: float = 1 / 1000,
@@ -405,7 +410,10 @@ def plot_scatter_actual_reported(
     - title_prefix: Prefix for the plot titles.
     - activity_type: Type of activity to plot.
     - activity_type_col: Column name for the activity type.
+    - detour_factor: Detour factor for the distance adjustment. (see `_adjust_distance`)
+    - decay_rate: Decay rate for the distance adjustment.
     - crs: Coordinate reference system (CRS) of the activities data.
+    - x_axis_max: Maximum value for the x-axis. (use to remove very high reported distances / times)
     - save_dir: Directory to save the plots. If None, plots are not saved.
     - display: Whether to display plots by calling `plt.show()`.
     """
@@ -434,6 +442,13 @@ def plot_scatter_actual_reported(
     # calculate the length of the line_geometry in meters
     activity_chains_plot["length"] = activity_chains_plot["line_geometry"].length
 
+    # Create a column for estimated distance
+    activity_chains_plot["length"] = activity_chains_plot["length"].apply(
+        lambda d: _adjust_distance(
+            d, detour_factor=detour_factor, decay_rate=decay_rate
+        )
+    )
+
     # Calculate the number of rows and columns for the subplots. It is a function of the number of modes
     nrows = math.ceil(len(activity_chains_plot["mode"].unique()) / 2)
     ncols = 2
@@ -459,6 +474,10 @@ def plot_scatter_actual_reported(
         z = np.polyfit(subset_mode[x_col], subset_mode[y_col] * y_scale, 1)
         p = np.poly1d(z)
         ax.plot(subset_mode[x_col], p(subset_mode[x_col]), "r--")
+
+        # Set x-axis limit
+        if x_axis_max:
+            ax.set_xlim(0, x_axis_max)
 
         ax.set_title(f"{title_prefix} for mode: {mode}")
         ax.set_xlabel(x_label)

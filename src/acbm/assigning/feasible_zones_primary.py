@@ -77,6 +77,8 @@ def get_possible_zones(
     travel_times: Optional[pd.DataFrame] = None,
     filter_by_activity: bool = False,
     time_tolerance: float = 0.2,
+    detour_factor: float = 1.56,
+    decay_rate: float = 0.0001,
 ) -> dict:
     """
     Get possible zones for all activity chains in the dataset. This function loops over the travel_times dataframe and filters by mode, time of day and weekday/weekend.
@@ -106,6 +108,13 @@ def get_possible_zones(
         activity chain's travel time (which is stored in "TripTotalTime"). Allowable travel_times are those that fall in the range of:
         travel_time_reported * (1 - time_tolerance) <= travel_time_reported <= travel_time_reported * (1 + time_tolerance)
         Default = 0.2
+    detour_factor: float
+        The detour factor used to calculate travel distances between zones from euclidian distances.
+        Default = 1.56
+    decay_rate: float
+        The decay rate used to calculate travel times between zones from travel distances. Detours make up a smaller portion of
+        longer distance trips. Default = 0.0001
+
 
     Returns
     -------
@@ -137,7 +146,11 @@ def get_possible_zones(
     if travel_times is None:
         logger.info("Travel time matrix not provided: Creating travel times estimates")
         travel_times = zones_to_time_matrix(
-            zones=boundaries, id_col=zone_id, time_units="m"
+            zones=boundaries,
+            id_col=zone_id,
+            time_units="m",
+            detour_factor=detour_factor,
+            decay_rate=decay_rate,
         )
 
     list_of_modes = activity_chains["mode"].unique()
@@ -224,7 +237,7 @@ def get_possible_zones(
             travel_times_filtered_mode_time_day = travel_times_filtered_mode
             # if mode = car_passenger, we compare to the travel time for car (we don't
             # have travel times for car_passenger)
-            if mode == "car_passenger":
+            if mode in ("car_passenger", "taxi"):
                 activity_chains_filtered = activity_chains[
                     (activity_chains["mode"] == "car")
                 ]

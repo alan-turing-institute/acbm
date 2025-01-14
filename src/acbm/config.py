@@ -41,6 +41,12 @@ class MatchingParams(BaseModel):
 
 
 @dataclass(frozen=True)
+class FeasibleAssignmentParams(BaseModel):
+    detour_factor: float
+    decay_rate: float
+
+
+@dataclass(frozen=True)
 class WorkAssignmentParams(BaseModel):
     use_percentages: bool
     weight_max_dev: float
@@ -84,10 +90,13 @@ class PathParams(BaseModel):
 
 class Config(BaseModel):
     parameters: Parameters = Field(description="Config: parameters.")
+    matching: MatchingParams = Field(description="Config: parameters for matching.")
+    feasible_assignment: FeasibleAssignmentParams = Field(
+        description="Config: parameters for assignment of feasible zones."
+    )
     work_assignment: WorkAssignmentParams = Field(
         description="Config: parameters for work assignment."
     )
-    matching: MatchingParams = Field(description="Config: parameters for matching.")
     postprocessing: Postprocessing = Field(
         description="Config: parameters for postprocessing."
     )

@@ -286,10 +286,39 @@ def _get_activities_per_zone_df(activities_per_zone: dict) -> pd.DataFrame:
     return pd.concat(activities_per_zone.values())
 
 
+def _adjust_distance(
+    distance: float,
+    detour_factor: float,
+    decay_rate: float,
+) -> float:
+    """
+    Adjusts euclidian distances by adding a detour factor. We use minkowski distance
+    and a decay rate, as longer detour makes up a smaller proportion of the total
+    distance as the distance increases.
+
+    Parameters
+    ----------
+    distance : float
+        The original distance.
+    detour_factor : float
+        The detour factor to be applied.
+    decay_rate : float
+        The decay rate to be applied.
+
+    Returns
+    -------
+    float
+        The adjusted distance.
+    """
+    return distance * (1 + ((detour_factor - 1) * np.exp(-decay_rate * distance)))
+
+
 def zones_to_time_matrix(
     zones: gpd.GeoDataFrame,
     time_units: str,
     id_col: Optional[str] = None,
+    detour_factor: float = 1.56,
+    decay_rate: float = 0.0001,
 ) -> pd.DataFrame:
     """
     Calculates the distance matrix between the centroids of the given zones and returns it as a DataFrame. The matrix also adds
@@ -307,6 +336,8 @@ def zones_to_time_matrix(
         The name of the column in the zones GeoDataFrame to use as the ID. If None, the index values are used. Default is None.
     time_units: str, optional
         The units to use for the travel time. Options are 's' for seconds and 'm' for minutes.
+    detour_factor: float, optional
+        The detour factor to apply to the distance. Default is 1.56.
     Returns
     -------
     pd.DataFrame
@@ -322,6 +353,11 @@ def zones_to_time_matrix(
     # wide to long
     distances = distances.stack().reset_index()
     distances.columns = [f"{id_col}_from", f"{id_col}_to", "distance"]
+
+    # adjust distance column by adding a detour factor
+    distances["distance"] = distances["distance"].apply(
+        lambda d: _adjust_distance(d, detour_factor, decay_rate)
+    )
 
     # replace the index values with the id_col values if id_col is specified
     if id_col is not None:
@@ -449,7 +485,8 @@ def intrazone_time(zones: gpd.GeoDataFrame, key_column: str) -> dict:
     # Calculate the area of each zone
     zones["area"] = zones["geometry"].area
     # Calculate the average distance within each zone
-    zones["average_dist"] = np.sqrt(zones["area"]) / 2
+    # sqrt(area) / 2 would be radius
+    zones["average_dist"] = np.sqrt(zones["area"]) / 1.5
 
     # Mode speeds in m/s
     mode_speeds_mps = {
