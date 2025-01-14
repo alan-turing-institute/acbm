@@ -1,3 +1,4 @@
+import logging
 from copy import deepcopy
 
 import numpy as np
@@ -5,7 +6,7 @@ import pam
 import pandas as pd
 from pam.planner.choice_location import DiscretionaryTrips
 
-from acbm.logger_config import assigning_secondary_zones_logger as logger
+logger = logging.getLogger("assigning_secondary_zone")
 
 
 def set_home_ozone(data: pd.DataFrame, oact_col: str, ozone_col: str, hzone_col: str):
@@ -152,17 +153,18 @@ def create_od_matrices(
     to_indices = df[zone_to].map(zone_index)
 
     for mode in modes:
-        print(f"Starting mode: {mode}")
+        logger.info(f"Starting mode: {mode}")
         mask = df[mode_column] == mode
         values = df[mask][value_column].fillna(fill_value)  # Fill missing values
         od_matrices[mode][from_indices[mask], to_indices[mask]] = values
-        print(f"Finished mode: {mode}")
+        logger.info(f"Finished mode: {mode}")
 
     return od_matrices
 
 
 def update_population_plans(
-    population: pam.core.Population, od: pam.planner.od.ODFactory
+    population: pam.core.Population,
+    od: pam.planner.od.ODFactory,
 ) -> None:
     """
     Update the plans in a population object using the DiscretionaryTrips planner

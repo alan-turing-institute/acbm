@@ -1,3 +1,4 @@
+import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Dict, List
@@ -7,6 +8,8 @@ import pandas as pd
 from sklearn.neighbors import NearestNeighbors
 
 # categorical (exact) matching - (for household level)
+
+logger = logging.getLogger("matching")
 
 
 @dataclass
@@ -282,7 +285,7 @@ def match_individuals(
 
         if show_progress and i % 100 == 0:
             # Print the iteration number and the number of keys in the dict
-            print(f"Matching for household {i} out of: {len(matches_hh)}")
+            logger.info(f"Matching for household {i} out of: {len(matches_hh)}")
 
         # apply the matching
         match = match_psm(rows_df1, rows_df2, matching_columns)

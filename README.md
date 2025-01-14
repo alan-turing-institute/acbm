@@ -89,37 +89,37 @@ The pipeline is a series of scripts that are run in sequence to generate the act
 │   │   │           ├── trip_eul_2002-2022.tab
 │   │   │           └── <other_nts_tables>.tab
 │   │   ├── travel_times
-│   │   |    ├── oa
-│   │   |    |   ├── travel_time_matrix.parquet
-|   |   |    └── msoa
-│   │   |        └── travel_time_matrix.parquet
+│   │   │    ├── oa
+│   │   │    |   ├── travel_time_matrix.parquet
+|   |   │    └── msoa
+│   │   │        └── travel_time_matrix.parquet
 │   │   ├── ODWP01EW_OA.zip
 │   │   ├── ODWP15EW_MSOA_v1.zip
-│   │   ├── spc_output
-│   │   │   ├── <region>>_people_hh.parquet (Generated in Script 1)
-│   │   │   ├── <region>>_people_tu.parquet (Generated in Script 1)
-│   │   │   ├── raw
-│   │   │   │   ├── <region>_households.parquet
-│   │   │   │   ├── <region>_info_per_msoa.json
-│   │   │   │   ├── <region>.pb
-│   │   │   │   ├── <region>_people.parquet
-│   │   │   │   ├── <region>_time_use_diaries.parquet
-│   │   │   │   ├── <region>_venues.parquet
-│   │   │   │   ├── README.md
-│   ├── interim
-│   │   ├── assigning (Generated in Script 3)
-│   │   └── matching (Generated in Script 2)
-│   └── processed
-│       ├── acbm_<config_name>_<date>
-│       │   ├── activities.csv
-│       │   ├── households.csv
-│       │   ├── legs.csv
-│       │   ├── legs_with_locations.parquet
-│       │   ├── people.csv
-│       │   └── plans.xml
-│       ├── plots
-│       │   ├── assigning
-│       │   └── validation
+│   │   └── spc_output
+│   │      └── raw
+│   │          ├── <region>_households.parquet
+│   │          ├── <region>_info_per_msoa.json
+│   │          ├── <region>.pb
+│   │          ├── <region>_people.parquet
+│   │          ├── <region>_time_use_diaries.parquet
+│   │          ├── <region>_venues.parquet
+│   │          └── README.md
+│   └── outputs
+│       └- <config_id>
+│           │  
+│           ├── interim
+│           │       ├── <region>>_people_hh.parquet (Generated in Script 1)
+│           │       ├── assigning (Generated in Script 3)
+│           │       └── matching (Generated in Script 2)
+│           ├── activities.csv
+│           ├── households.csv
+│           ├── legs.csv
+│           ├── legs_with_locations.parquet
+│           ├── people.csv
+│           ├── plans.xml
+│           ├── plots
+│           │   ├── assigning
+│           │   └── validation
 ```
 
 ## Step 1: Prepare Data Inputs

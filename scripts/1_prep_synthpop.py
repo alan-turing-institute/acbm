@@ -1,31 +1,28 @@
 from uatk_spc.builder import Builder
 
-import acbm
 from acbm.cli import acbm_cli
-from acbm.config import load_config
+from acbm.config import load_and_setup_config
 
 
 @acbm_cli
 def main(config_file):
-    config = load_config(config_file)
-    config.init_rng()
-    region = config.region
+    config = load_and_setup_config(config_file)
+    logger = config.get_logger("preprocessing", __file__)
 
-    # Pick a region with SPC output saved
-    path = acbm.root_path / "data/external/spc_output/raw/"
-
-    # Add people and households
+    logger.info("Combine SPC people and houeshold data")
     spc_people_hh = (
-        Builder(path, region, backend="pandas", input_type="parquet")
+        Builder(
+            config.spc_raw_path, config.region, backend="pandas", input_type="parquet"
+        )
         .add_households()
         .unnest(
             ["health", "employment", "details", "demographics"], rsuffix="_household"
         )
         .build()
     )
-    spc_people_hh.to_parquet(
-        acbm.root_path / f"data/external/spc_output/{region}_people_hh.parquet"
-    )
+
+    logger.info(f"Write combined SPC data to: {config.spc_combined_filepath}")
+    spc_people_hh.to_parquet(config.spc_combined_filepath)
 
 
 if __name__ == "__main__":

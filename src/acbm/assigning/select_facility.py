@@ -1,11 +1,14 @@
+import logging
+from multiprocessing import Pool
 from typing import Optional, Tuple
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 from shapely import Point
+from tqdm import tqdm
 
-from acbm.logger_config import assigning_facility_locations_logger as logger
+logger = logging.getLogger("assigning_facility_locations")
 
 
 def _select_facility(
@@ -62,11 +65,12 @@ def _select_facility(
         {unique_id_col: (np.nan, np.nan)} if no suitable facility is found.
     """
     # ----- Step 1. Find valid facilities in the destination zone
-
+    # Added to enable multiprocessing
+    pd.options.mode.copy_on_write = True
     # Extract the destination zone from the input row
     destination_zone = row[row_destination_zone_col]
     if pd.isna(destination_zone):
-        logger.info(f"Activity {row.name}: Destination zone is NA")
+        logger.debug(f"Activity {row.name}: Destination zone is NA")
         # return {"id": np.nan, "geometry": np.nan}
         # TODO: check this replacement is correct
         return {row[unique_id_col]: (np.nan, np.nan)}
@@ -81,13 +85,13 @@ def _select_facility(
             lambda x: row[row_activity_type_col] in x
         )
     ]
-    logger.info(
+    logger.debug(
         f"Activity {row.name}: Found {len(facilities_valid)} matching facilities in zone {destination_zone}"
     )
 
     # If no specific facilities found in the initial zone, and neighboring zones are provided, search in neighboring zones
     if facilities_valid.empty and neighboring_zones:
-        logger.info(
+        logger.debug(
             f"Activity {row.name}: No {row[row_activity_type_col]} facilities in {destination_zone}. Expanding search to neighboring zones"
         )
         neighbors = neighboring_zones.get(destination_zone, [])
@@ -99,13 +103,13 @@ def _select_facility(
                 lambda x: row[row_activity_type_col] in x
             )
         ]
-        logger.info(
+        logger.debug(
             f"Activity {row.name}: Found {len(facilities_valid)} matching facilities in neighboring zones"
         )
 
     # If no specific facilities found and a fallback type is provided, attempt to find facilities matching the fallback type
     if facilities_valid.empty and fallback_type:
-        logger.info(
+        logger.debug(
             f"Activity {row.name}: No {row[row_activity_type_col]} facilities in zone {destination_zone} or neighboring zones, trying with {fallback_type}"
         )
         # This should consider both the initial zone and neighboring zones if the previous step expanded the search
@@ -114,20 +118,20 @@ def _select_facility(
                 lambda x: fallback_type in x
             )
         ]
-        logger.info(
+        logger.debug(
             f"Activity {row.name}: Found {len(facilities_valid)} matching facilities with type: {fallback_type}"
         )
 
     # if no specific facilities found and fallback_to_random is True, take all facilities in the zone
     if facilities_valid.empty and fallback_to_random:
-        logger.info(
+        logger.debug(
             f"Activity {row.name}: No facilities in zone {destination_zone} with {gdf_facility_type_col} '{fallback_type or row[row_activity_type_col]}'. Sampling from all facilities in the zone"
         )
         facilities_valid = facilities_in_zone
 
     # If no facilities found after all attempts, log the failure and return NaN
     if facilities_valid.empty:
-        logger.info(
+        logger.debug(
             f"Activity {row.name}: No facilities in zone {destination_zone} with {gdf_facility_type_col} '{fallback_type or row[row_activity_type_col]}'"
         )
         return {row[unique_id_col]: (np.nan, np.nan)}
@@ -146,11 +150,11 @@ def _select_facility(
         )
         facilities_valid = facilities_valid.dropna(subset=["floor_area"])
         facility = facilities_valid.sample(1, weights=facilities_valid["floor_area"])
-        logger.info(f"Activity {row.name}: Sampled facility based on floor area)")
+        logger.debug(f"Activity {row.name}: Sampled facility based on floor area)")
     else:
         # Otherwise, randomly sample one facility from the valid facilities
         facility = facilities_valid.sample(1)
-        logger.info(f"Activity {row.name}: Sampled facility randomly")
+        logger.debug(f"Activity {row.name}: Sampled facility randomly")
 
     # Return the id and geometry of the selected facility
     return {
@@ -200,29 +204,36 @@ def select_facility(
     dict[str, Tuple[str, Point ] | Tuple[float, float]]: Unique ID column as
         keys with selected facility ID and facility ID's geometry, or (np.nan, np.nan)
     """
-    # Initialize a dictionary to store the selected facilities
-    selected_facilities = {}
-
-    # Select a facility for each row in the DataFrame
-    for _, row in df.iterrows():
-        selected_facility = _select_facility(
-            row=row,
-            unique_id_col=unique_id_col,
-            facilities_gdf=facilities_gdf,
-            row_destination_zone_col=row_destination_zone_col,
-            row_activity_type_col=row_activity_type_col,
-            gdf_facility_zone_col=gdf_facility_zone_col,
-            gdf_facility_type_col=gdf_facility_type_col,
-            gdf_sample_col=gdf_sample_col,
-            neighboring_zones=neighboring_zones,
-            fallback_type=fallback_type,
-            fallback_to_random=fallback_to_random,
-        )
-
-        # Update the dictionary with the selected facility
-        selected_facilities.update(selected_facility)
-
-    return selected_facilities
+    # TODO: update this to be configurable, `None` is os.process_cpu_count()
+    # TODO: check if this is deterministic for a given seed (or pass seed to pool)
+    with Pool(None) as p:
+        # Set to a large enough chunk size so that each process
+        # has a sufficiently large amount of processing to do.
+        chunk_size = 16_000
+        d = {}
+        for start in tqdm(range(0, df.shape[0], chunk_size)):
+            chunk = df.iloc[start : start + chunk_size, :]
+            args = [
+                # TODO: add seed (derived from global seed as an argument)
+                (
+                    row,
+                    unique_id_col,
+                    facilities_gdf,
+                    row_destination_zone_col,
+                    gdf_facility_zone_col,
+                    row_activity_type_col,
+                    gdf_facility_type_col,
+                    fallback_type,
+                    fallback_to_random,
+                    neighboring_zones,
+                    gdf_sample_col,
+                )
+                for _, row in chunk.iterrows()
+            ]
+            results = p.starmap(_select_facility, args)
+            for result in results:
+                d.update(result)
+        return d
 
 
 def map_activity_locations(

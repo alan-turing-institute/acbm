@@ -4,9 +4,7 @@ build-backend = "poetry.core.masonry.api"
 [tool.poetry]
 name = "acbm"
 version = "0.1.0"
-authors = [
-  "Hussein Mahfouz <husseinmahfouz93@gmail.com>",
-]
+authors = ["Hussein Mahfouz <husseinmahfouz93@gmail.com>"]
 homepage = "https://github.com/alan-turing-institute/acbm"
 repository = "https://github.com/alan-turing-institute/acbm"
 license = "Apache-2.0"
@@ -28,7 +26,7 @@ python = "^3.10"
 pytest = { version = ">=6", optional = true }
 pytest-cov = { version = ">=3", optional = true }
 pandas = "^2.2.0"
-uatk-spc = {git = "https://github.com/alan-turing-institute/uatk-spc.git", subdirectory = "python"}
+uatk-spc = { git = "https://github.com/alan-turing-institute/uatk-spc.git", subdirectory = "python" }
 geopandas = "^0.14.3"
 matplotlib = "^3.8.3"
 scikit-learn = "^1.4.1.post1"
@@ -43,9 +41,10 @@ tomlkit = "^0.13.0"
 cml-pam = "0.3.2"
 gdal = "<=3.8.4"
 pandera = "^0.20.4"
-osmox = {git = "https://github.com/arup-group/osmox"}
+osmox = { git = "https://github.com/arup-group/osmox" }
 pyrosm = "^0.6.2"
 jsonschema = "^4.23.0"
+jcs = "^0.2.1"
 
 [tool.poetry.dev-dependencies]
 pytest = ">= 6"
@@ -62,22 +61,13 @@ ipykernel = "^6.29.4"
 minversion = "6.0"
 addopts = ["-ra", "--showlocals", "--strict-markers", "--strict-config"]
 xfail_strict = true
-filterwarnings = [
-  "error",
-]
+filterwarnings = ["error"]
 log_cli_level = "INFO"
-testpaths = [
-  "tests",
-]
+testpaths = ["tests"]
 
 [tool.coverage]
 run.source = ["acbm"]
-port.exclude_lines = [
-  'pragma: no cover',
-  '\.\.\.',
-  'if typing.TYPE_CHECKING:',
-]
-
+port.exclude_lines = ['pragma: no cover', '\.\.\.', 'if typing.TYPE_CHECKING:']
 
 
 [tool.ruff]
@@ -86,29 +76,30 @@ exclude = []
 line-length = 88 # how long you want lines to be
 
 [tool.ruff.format]
-docstring-code-format = true  # code snippets in docstrings will be formatted
+docstring-code-format = true # code snippets in docstrings will be formatted
 
 [tool.ruff.lint]
 select = [
-  "E", "F", "W", # flake8
-  "B",           # flake8-bugbear
-  "I",           # isort
-  "ARG",         # flake8-unused-arguments
-  "C4",          # flake8-comprehensions
-  "EM",          # flake8-errmsg
-  "ICN",         # flake8-import-conventions
-  "ISC",         # flake8-implicit-str-concat
-  "G",           # flake8-logging-format
-  "PGH",         # pygrep-hooks
-  "PIE",         # flake8-pie
-  "PL",          # pylint
-  "PT",          # flake8-pytest-style
-  "RET",         # flake8-return
-  "RUF",         # Ruff-specific
-  "SIM",         # flake8-simplify
-  "UP",          # pyupgrade
-  "YTT",         # flake8-2020
-  "EXE",         # flake8-executable
+  "E",
+  "F",
+  "W",   # flake8
+  "B",   # flake8-bugbear
+  "I",   # isort
+  "ARG", # flake8-unused-arguments
+  "C4",  # flake8-comprehensions
+  "EM",  # flake8-errmsg
+  "ICN", # flake8-import-conventions
+  "ISC", # flake8-implicit-str-concat
+  "G",   # flake8-logging-format
+  "PGH", # pygrep-hooks
+  "PIE", # flake8-pie
+  "PL",  # pylint
+  "RET", # flake8-return
+  "RUF", # Ruff-specific
+  "SIM", # flake8-simplify
+  "UP",  # pyupgrade
+  "YTT", # flake8-2020
+  "EXE", # flake8-executable
 ]
 
 ignore = [
@@ -118,7 +109,7 @@ ignore = [
   "G004",   # Logging statement uses f-string, not necessary here
 ]
 unfixable = [
-  "F401",   # Would remove unused imports
-  "F841",   # Would remove unused variables
+  "F401", # Would remove unused imports
+  "F841", # Would remove unused variables
 ]
-flake8-unused-arguments.ignore-variadic-names = true  # allow unused *args/**kwargs
+flake8-unused-arguments.ignore-variadic-names = true # allow unused *args/**kwargs

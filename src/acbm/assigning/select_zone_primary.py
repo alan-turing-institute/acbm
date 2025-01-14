@@ -1,8 +1,9 @@
+import logging
 from typing import Optional
 
 import pandas as pd
 
-from acbm.logger_config import assigning_primary_zones_logger as logger
+logger = logging.getLogger("assigning_primary_zone")
 
 
 def select_zone(
@@ -149,7 +150,7 @@ def select_zone(
         return selected_zone
 
     except KeyError:
-        logger.info(f"KeyError: Key {activity_id} in possible_zones has no values")
+        logger.error(f"KeyError: Key {activity_id} in possible_zones has no values")
         return "NA"
 
 
@@ -240,11 +241,11 @@ def _get_zones_using_time_estimate(
     str
         The zone that has the estimated time closest to the given time.
     """
-
     acceptable_modes = ["car", "car_passenger", "pt", "walk", "cycle", "taxi"]
 
     if mode is not None and mode not in acceptable_modes:
         error_message = f"Invalid mode: {mode}. Mode must be one of {acceptable_modes}."
+        logger.error(error_message)
         raise ValueError(error_message)
 
     # Convert to_zones to a set for faster lookup
@@ -260,7 +261,7 @@ def _get_zones_using_time_estimate(
     # Check if the filtered dictionary is empty
     if not filtered_dict:
         # Handle the case where there are no travel time estimates for the target zone
-        print(
+        logger.info(
             f"No travel time estimates found for from_zone: {from_zone} to any of the to_zones: {to_zones}"
         )
         return None

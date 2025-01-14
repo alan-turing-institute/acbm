@@ -1,9 +1,6 @@
-import os
-
 import geopandas as gpd
 import pandas as pd
 
-import acbm
 from acbm.assigning.plots import (
     plot_workzone_assignment_heatmap,
     plot_workzone_assignment_line,
@@ -15,42 +12,29 @@ from acbm.assigning.utils import (
     filter_matrix_to_boundary,
 )
 from acbm.cli import acbm_cli
-from acbm.config import load_config
-from acbm.logger_config import assigning_primary_zones_logger as logger
+from acbm.config import load_and_setup_config
 from acbm.preprocessing import add_locations_to_activity_chains
 from acbm.utils import calculate_rmse
 
 
 @acbm_cli
 def main(config_file):
-    config = load_config(config_file)
-    config.init_rng()
+    config = load_and_setup_config(config_file)
+    logger = config.get_logger("assigning_primary_zone", __file__)
 
     #### LOAD DATA ####
 
     # --- Possible zones for each activity (calculated in 3.1_assign_possible_zones.py)
-    possible_zones_work = pd.read_pickle(
-        acbm.root_path / "data/interim/assigning/possible_zones_work.pkl"
-    )
+    possible_zones_work = pd.read_pickle(config.possible_zones_work)
 
     # --- boundaries
-
     logger.info("Loading study area boundaries")
-
-    boundaries = gpd.read_file(
-        acbm.root_path / "data/external/boundaries/study_area_zones.geojson"
-    )
-    logger.info("Study area boundaries loaded")
-
-    # Reproject boundaries to the output CRS specified in the config
-    boundaries = boundaries.to_crs(f"epsg:{config.output_crs}")
-    logger.info(f"Boundaries reprojected to {config.output_crs}")
+    boundaries = config.get_study_area_boundaries()
+    logger.info(f"Study area boundaries loaded and reprojected to {config.output_crs}")
 
     # osm POI data
 
-    osm_data_gdf = pd.read_pickle(
-        acbm.root_path / "data/interim/assigning/osm_poi_with_zones.pkl"
-    )
+    osm_data_gdf = pd.read_pickle(config.osm_poi_with_zones)
     # Convert the DataFrame into a GeoDataFrame, and assign a coordinate reference system (CRS)
     osm_data_gdf = gpd.GeoDataFrame(
         osm_data_gdf, geometry="geometry", crs=f"EPSG:{config.output_crs}"
@@ -59,7 +43,7 @@ def main(config_file):
     # --- Activity chains
     logger.info("Loading activity chains")
 
-    activity_chains = activity_chains_for_assignment(cols_for_assignment_work())
+    activity_chains = activity_chains_for_assignment(config, cols_for_assignment_work())
     activity_chains = activity_chains[
         activity_chains["TravDay"] == config.parameters.nts_day_of_week
     ]
@@ -70,7 +54,9 @@ def main(config_file):
     logger.info("Assigning activity home locations to boundaries zoning system")
     # add home location (based on OA11CD from SPC)
     activity_chains_work = add_locations_to_activity_chains(
-        activity_chains=activity_chains_work, target_crs=f"EPSG:{config.output_crs}"
+        activity_chains=activity_chains_work,
+        target_crs=f"EPSG:{config.output_crs}",
+        centroid_layer=pd.read_csv(config.centroid_layer_filepath),
     )
 
     # --- WORK: existing travel demand data
@@ -89,12 +75,10 @@ def main(config_file):
     # Clean the data
 
     if commute_level == "MSOA":
-        print("Step 1: Reading in the zipped csv file")
-        travel_demand = pd.read_csv(
-            acbm.root_path / "data/external/ODWP15EW_MSOA_v1.zip"
-        )
+        logger.info("Step 1: Reading in the zipped csv file")
+        travel_demand = pd.read_csv(config.travel_demand_filepath)
 
-        print("Step 2: Creating commute_mode_dict")
+        logger.info("Step 2: Creating commute_mode_dict")
         commute_mode_dict = {
             "Bus, minibus or coach": "pt",
             "Driving a car or van": "car",
@@ -109,12 +93,12 @@ def main(config_file):
             "Work mainly at or from home": "home",
         }
 
-        print("Step 3: Mapping commute mode to model mode")
+        logger.info("Step 3: Mapping commute mode to model mode")
         travel_demand["mode"] = travel_demand[
             "Method used to travel to workplace (12 categories) label"
         ].map(commute_mode_dict)
 
-        print("Step 4: Filtering rows and dropping unnecessary columns")
+        logger.info("Step 4: Filtering rows and dropping unnecessary columns")
         travel_demand_clipped = travel_demand[
             travel_demand["Place of work indicator (4 categories) code"].isin([1, 3])
         ]
@@ -129,7 +113,7 @@ def main(config_file):
             ]
         )
 
-        print("Step 5: Renaming columns and grouping")
+        logger.info("Step 5: Renaming columns and grouping")
         travel_demand_clipped = travel_demand_clipped.rename(
             columns={
                 "Middle layer Super Output Areas code": "MSOA21CD_home",
@@ -142,7 +126,7 @@ def main(config_file):
             .reset_index()
         )
 
-        print("Step 6: Filtering matrix to boundary")
+        logger.info("Step 6: Filtering matrix to boundary")
         travel_demand_clipped = filter_matrix_to_boundary(
             boundary=boundaries,
             matrix=travel_demand_clipped,
@@ -152,10 +136,10 @@ def main(config_file):
         )
 
     elif commute_level == "OA":
-        print("Step 1: Reading in the zipped csv file")
-        travel_demand = pd.read_csv(acbm.root_path / "data/external/ODWP01EW_OA.zip")
+        logger.info("Step 1: Reading in the zipped csv file")
+        travel_demand = pd.read_csv(config.travel_demand_filepath)
 
-        print("Step 2: Filtering rows and dropping unnecessary columns")
+        logger.info("Step 2: Filtering rows and dropping unnecessary columns")
         travel_demand_clipped = travel_demand[
             travel_demand["Place of work indicator (4 categories) code"].isin([1, 3])
         ]
@@ -166,7 +150,7 @@ def main(config_file):
             ]
         )
 
-        print("Step 3: Renaming columns and grouping")
+        logger.info("Step 3: Renaming columns and grouping")
         travel_demand_clipped = travel_demand_clipped.rename(
             columns={
                 "Output Areas code": "OA21CD_home",
@@ -179,7 +163,7 @@ def main(config_file):
             .reset_index()
         )
 
-        print("Step 4: Filtering matrix to boundary")
+        logger.info("Step 4: Filtering matrix to boundary")
         travel_demand_clipped = filter_matrix_to_boundary(
             boundary=boundaries,
             matrix=travel_demand_clipped,
@@ -291,12 +275,8 @@ def main(config_file):
         )["demand_assigned"].transform(lambda x: (x / x.sum()) * 100)
     )
 
-    # Define the output file path
-    os.makedirs(acbm.root_path / "data/processed/", exist_ok=True)
-    output_file_path = acbm.root_path / "data/processed/workzone_rmse_results.txt"
-
     # Open the file in write mode
-    with open(output_file_path, "w") as file:
+    with open(config.workzone_rmse_results_path, "w") as file:
         # (1) RMSE for % of Total Demand
         predictions = workzone_assignment_opt["pct_of_total_demand_assigned"]
         targets = workzone_assignment_opt["pct_of_total_demand_actual"]
@@ -330,7 +310,7 @@ def main(config_file):
         n=10,
         selection_type="top",
         sort_by="actual",
-        save_dir=acbm.root_path / "data/processed/plots/assigning/",
+        save_dir=config.assigning_plots_path,
     )
 
     # Plot the demand_actual and demand_assigned values as a heatmap for n origin_zones.
@@ -339,14 +319,11 @@ def main(config_file):
         n=20,
         selection_type="top",
         sort_by="assigned",
-        save_dir=acbm.root_path / "data/processed/plots/assigning/",
+        save_dir=config.assigning_plots_path,
     )
 
     # save the activity chains as a pickle
-
-    activity_chains_work.to_pickle(
-        acbm.root_path / "data/interim/assigning/activity_chains_work.pkl"
-    )
+    activity_chains_work.to_pickle(config.activity_chains_work)
 
 
 if __name__ == "__main__":

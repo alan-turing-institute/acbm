@@ -1,125 +1,150 @@
+from dataclasses import dataclass
+from typing import Self
+
 import numpy as np
 import pandas as pd
 
+from acbm.config import Config
 
-def filter_by_pid(
-    individuals: pd.DataFrame,
-    activities: pd.DataFrame,
-    legs: pd.DataFrame,
-    legs_geo: pd.DataFrame,
-    households: pd.DataFrame,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """
-    Filter the input DataFrames to include only include people (pids) that exist in all
-    dfs
 
-    Parameters
-    ----------
+@dataclass
+class Population:
     individuals: pd.DataFrame
-        Individuals DataFrame.
-    activities: pd.DataFrame
-        Activities DataFrame.
-    legs: pd.DataFrame:
-        Legs DataFrame.
-    legs_geo: pd.DataFrame
-        Legs with geo DataFrame.
     households: pd.DataFrame
-        Households DataFrame.
+    activities: pd.DataFrame
+    legs: pd.DataFrame
+    legs_geo: pd.DataFrame
 
-    Returns
-    -------
-    tuple
-        A tuple containing the filtered DataFrames (individuals, activities, legs, legs_geo, households).
-    """
-    # Identify common pids
-    common_pids = (
-        set(individuals["pid"])
-        .intersection(activities["pid"])
-        .intersection(legs["pid"])
-        .intersection(legs_geo["pid"])
-    )
+    @classmethod
+    def read(cls, config: Config) -> Self:
+        individuals = pd.read_csv(config.output_path / "people.csv")
+        households = pd.read_csv(config.output_path / "households.csv")
+        activities = pd.read_csv(config.output_path / "activities.csv")
+        legs = pd.read_csv(config.output_path / "legs.csv")
+        legs_geo = pd.read_parquet(config.output_path / "legs_with_locations.parquet")
+        return Population(
+            individuals=individuals,
+            households=households,
+            activities=activities,
+            legs=legs,
+            legs_geo=legs_geo,
+        )
 
-    # Filter Individual Level DataFrames
-    individuals = individuals[individuals["pid"].isin(common_pids)]
-    activities = activities[activities["pid"].isin(common_pids)]
-    legs = legs[legs["pid"].isin(common_pids)]
-    legs_geo = legs_geo[legs_geo["pid"].isin(common_pids)]
+    def filter_by_pid(self) -> Self:
+        """
+        Filter the input DataFrames to include only include people (pids) that exist in all
+        dfs
 
-    # Filter Household Level DataFrame
-    households = households[households["hid"].isin(individuals["hid"])]
+        Parameters
+        ----------
+        individuals: pd.DataFrame
+            Individuals DataFrame.
+        activities: pd.DataFrame
+            Activities DataFrame.
+        legs: pd.DataFrame:
+            Legs DataFrame.
+        legs_geo: pd.DataFrame
+            Legs with geo DataFrame.
+        households: pd.DataFrame
+            Households DataFrame.
 
-    return individuals, activities, legs, legs_geo, households
+        Returns
+        -------
+        tuple
+            A tuple containing the filtered DataFrames (individuals, activities, legs, legs_geo, households).
+        """
+        # Identify common pids
+        common_pids = (
+            set(self.individuals["pid"])
+            .intersection(self.activities["pid"])
+            .intersection(self.legs["pid"])
+            .intersection(self.legs_geo["pid"])
+        )
 
+        # Filter Individual Level DataFrames
+        individuals = self.individuals[self.individuals["pid"].isin(common_pids)]
+        activities = self.activities[self.activities["pid"].isin(common_pids)]
+        legs = self.legs[self.legs["pid"].isin(common_pids)]
+        legs_geo = self.legs_geo[self.legs_geo["pid"].isin(common_pids)]
 
-def filter_no_location(
-    individuals: pd.DataFrame,
-    households: pd.DataFrame,
-    activities: pd.DataFrame,
-    legs: pd.DataFrame,
-    legs_geo: pd.DataFrame,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """
-    Cleans the provided DataFrames by removing rows without location data. Gets all pids
-    that have at least one row with missing location data, and removes all rows with
-    these pids. pids are geneerated from two sources:
-       - legs_geo with missing start_loc or end_loc
-       - individuals with missing hzone
+        # Filter Household Level DataFrame
+        households = self.households[self.households["hid"].isin(individuals["hid"])]
 
-    Parameters
-    ----------
-    individuals : pd.DataFrame
-        DataFrame containing individual data.
-    households : pd.DataFrame
-        DataFrame containing household data.
-    activities : pd.DataFrame
-        DataFrame containing activity data.
-    legs : pd.DataFrame
-        DataFrame containing legs data.
-    legs_geo : pd.DataFrame
-        DataFrame containing legs with geographic data.
+        return Population(
+            individuals=individuals,
+            households=households,
+            activities=activities,
+            legs=legs,
+            legs_geo=legs_geo,
+        )
 
-    Returns
-    -------
-    tuple
-        A tuple containing the cleaned DataFrames
-        (individuals_cleaned, households_cleaned, activities_cleaned, legs_cleaned, legs_geo_cleaned).
-    """
-    # Identify rows in legs_geo where start_loc or end_loc are null
-    invalid_rows_legs_geo = legs_geo[
-        legs_geo["start_loc"].isnull() | legs_geo["end_loc"].isnull()
-    ]
+    def filter_no_location(self) -> Self:
+        """
+        Cleans the provided DataFrames by removing rows without location data. Gets all pids
+        that have at least one row with missing location data, and removes all rows with
+        these pids. pids are geneerated from two sources:
+        - legs_geo with missing start_loc or end_loc
+        - individuals with missing hzone
 
-    # Extract the pid values associated with these rows
-    invalid_pids_legs_geo = invalid_rows_legs_geo["pid"].unique()
+        Parameters
+        ----------
+        individuals : pd.DataFrame
+            DataFrame containing individual data.
+        activities : pd.DataFrame
+            DataFrame containing activity data.
+        legs : pd.DataFrame
+            DataFrame containing legs data.
+        legs_geo : pd.DataFrame
+            DataFrame containing legs with geographic data.
+        households : pd.DataFrame
+            DataFrame containing household data.
 
-    # Identify rows in individuals where hzone is null
-    invalid_rows_individuals = individuals[individuals["hzone"].isnull()]
+        Returns
+        -------
+        tuple
+            A tuple containing the cleaned DataFrames
+            (individuals_cleaned, households_cleaned, activities_cleaned, legs_cleaned, legs_geo_cleaned).
+        """
+        # Identify rows in legs_geo where start_loc or end_loc are null
+        invalid_rows_legs_geo = self.legs_geo[
+            self.legs_geo["start_loc"].isnull() | self.legs_geo["end_loc"].isnull()
+        ]
 
-    # Extract the pid values associated with these rows
-    invalid_pids_individuals = invalid_rows_individuals["pid"].unique()
+        # Extract the pid values associated with these rows
+        invalid_pids_legs_geo = invalid_rows_legs_geo["pid"].unique()
 
-    # Combine the invalid pid values from both sources
-    invalid_pids = set(invalid_pids_legs_geo).union(set(invalid_pids_individuals))
+        # Identify rows in individuals where hzone is null
+        invalid_rows_individuals = self.individuals[self.individuals["hzone"].isnull()]
 
-    # Remove rows with these pids from all DataFrames
-    individuals_cleaned = individuals[~individuals["pid"].isin(invalid_pids)]
-    activities_cleaned = activities[~activities["pid"].isin(invalid_pids)]
-    legs_cleaned = legs[~legs["pid"].isin(invalid_pids)]
-    legs_geo_cleaned = legs_geo[~legs_geo["pid"].isin(invalid_pids)]
+        # Extract the pid values associated with these rows
+        invalid_pids_individuals = invalid_rows_individuals["pid"].unique()
 
-    # Extract remaining hid values from individuals_cleaned
-    remaining_hids = individuals_cleaned["hid"].unique()
+        # Combine the invalid pid values from both sources
+        invalid_pids = set(invalid_pids_legs_geo).union(set(invalid_pids_individuals))
 
-    # Filter households_cleaned to only include rows with hid values in remaining_hids
-    households_cleaned = households[households["hid"].isin(remaining_hids)]
+        # Remove rows with these pids from all DataFrames
+        individuals_cleaned = self.individuals[
+            ~self.individuals["pid"].isin(invalid_pids)
+        ]
+        activities_cleaned = self.activities[~self.activities["pid"].isin(invalid_pids)]
+        legs_cleaned = self.legs[~self.legs["pid"].isin(invalid_pids)]
+        legs_geo_cleaned = self.legs_geo[~self.legs_geo["pid"].isin(invalid_pids)]
 
-    return (
-        individuals_cleaned,
-        households_cleaned,
-        activities_cleaned,
-        legs_cleaned,
-        legs_geo_cleaned,
-    )
+        # Extract remaining hid values from individuals_cleaned
+        remaining_hids = individuals_cleaned["hid"].unique()
+
+        # Filter households_cleaned to only include rows with hid values in remaining_hids
+        households_cleaned = self.households[
+            self.households["hid"].isin(remaining_hids)
+        ]
+
+        return Population(
+            individuals=individuals_cleaned,
+            households=households_cleaned,
+            activities=activities_cleaned,
+            legs=legs_cleaned,
+            legs_geo=legs_geo_cleaned,
+        )
 
 
 def add_home_location_to_individuals(

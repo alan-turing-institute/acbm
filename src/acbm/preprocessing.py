@@ -5,8 +5,6 @@ import numpy as np
 import pandas as pd
 from shapely.geometry import MultiPolygon
 
-import acbm
-
 # ----- PREPROCESSING BOUNDARIES
 
 
@@ -416,7 +414,7 @@ def add_location(
 
 
 def add_locations_to_activity_chains(
-    activity_chains: pd.DataFrame, target_crs: str
+    activity_chains: pd.DataFrame, target_crs: str, centroid_layer: pd.DataFrame
 ) -> gpd.GeoDataFrame:
     """
     Add locations to activity chains and reproject to the target CRS.
@@ -427,16 +425,14 @@ def add_locations_to_activity_chains(
         DataFrame containing the activity chains.
     target_crs : str
         The target CRS to reproject the locations to.
+    centroid_layer : pd.DataFrame
+        DataFrame containing zone centroids.
 
     Returns
     -------
     gpd.GeoDataFrame
         GeoDataFrame with locations added and reprojected to the target CRS.
     """
-    # Add location column as spatial column from OA centroids
-    centroid_layer = pd.read_csv(
-        acbm.root_path / "data/external/centroids/Output_Areas_Dec_2011_PWC_2022.csv"
-    )
     return add_location(
         activity_chains, "EPSG:27700", target_crs, centroid_layer, "OA11CD", "OA11CD"
     )

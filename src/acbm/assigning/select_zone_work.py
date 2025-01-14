@@ -1,11 +1,13 @@
+import logging
 from dataclasses import dataclass, field
 from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
 import pulp
+from tqdm import tqdm
 
-from acbm.logger_config import assigning_primary_zones_logger as logger
+logger = logging.getLogger("assigning_primary_zone")
 
 
 @dataclass
@@ -428,7 +430,9 @@ class WorkZoneAssignment:
         max_dev = pulp.LpVariable("max_dev", 0, None, pulp.LpContinuous)
 
         # Create binary variables for each person, origin, and destination
-        for person_id, origins in self.activities_to_assign.items():
+        logger.info("Adding people to assignment problem")
+        for person_id, origins in tqdm(self.activities_to_assign.items()):
+            # logger.info(f"person id: {person_id}, origins: {origins}")
             for origin_id, feasible_zones in origins.items():
                 person_vars = []
                 # Select up to 10 zones for each person based on the actual flows (to limit number of variables)
@@ -475,49 +479,64 @@ class WorkZoneAssignment:
                 if person_vars:
                     prob += pulp.lpSum(person_vars) == 1
 
-        # Calculate assigned percentages and deviation for each origin-destination pair
-        for (from_zone, to_zone), percentage in self.percentages.items():
-            # Create a variable for the absolute deviation (with lower bound of 0)
-            abs_dev = pulp.LpVariable(
-                f"abs_dev_{from_zone}_{to_zone}", 0, None, pulp.LpContinuous
-            )
-            deviation_vars[(from_zone, to_zone)] = abs_dev
-            # Calculate the assigned flow for the origin-destination pair
-            assigned_flow = pulp.lpSum(
-                assignment_vars.get((person_id, from_zone, to_zone), 0)
-                for person_id, origins in self.activities_to_assign.items()
-                if (person_id, from_zone, to_zone) in assignment_vars
-            )
-            # Calculate the assigned percentage based on the total flows from each origin zone
-            if from_zone in self.total_flows:
-                total_people = self.total_flows[from_zone]
-                assigned_percentage = assigned_flow / total_people
-            else:
-                assigned_percentage = 0
-                logger.warning(f"Warning: Origin {from_zone} not found in total_flows.")
-
-            if use_percentages:
-                # to satisfy both constraints, abs_dev will be a positive number (it is the larger of the two)
-                prob += assigned_percentage - percentage <= abs_dev
-                prob += percentage - assigned_percentage <= abs_dev
-            else:
-                prob += (
-                    assigned_flow - self.actual_flows[(from_zone, to_zone)] <= abs_dev
+        if weight_max_dev > 0.0:
+            logger.info("Added max deviations to assignment problem")
+            # Calculate assigned percentages and deviation for each origin-destination pair
+            for (from_zone, to_zone), percentage in tqdm(self.percentages.items()):
+                # Create a variable for the absolute deviation (with lower bound of 0)
+                abs_dev = pulp.LpVariable(
+                    f"abs_dev_{from_zone}_{to_zone}", 0, None, pulp.LpContinuous
                 )
-                prob += (
-                    self.actual_flows[(from_zone, to_zone)] - assigned_flow <= abs_dev
+                deviation_vars[(from_zone, to_zone)] = abs_dev
+                # Calculate the assigned flow for the origin-destination pair
+                assigned_flow = pulp.lpSum(
+                    assignment_vars.get((person_id, from_zone, to_zone), 0)
+                    for person_id, origins in self.activities_to_assign.items()
+                    if (person_id, from_zone, to_zone) in assignment_vars
                 )
+                # Calculate the assigned percentage based on the total flows from each origin zone
+                if from_zone in self.total_flows:
+                    total_people = self.total_flows[from_zone]
+                    assigned_percentage = assigned_flow / total_people
+                else:
+                    assigned_percentage = 0
+                    logger.warning(
+                        f"Warning: Origin {from_zone} not found in total_flows."
+                    )
 
-            # Update the maximum deviation variable: it is the maximum of all deviations
-            prob += max_dev >= abs_dev
+                if use_percentages:
+                    # to satisfy both constraints, abs_dev will be a positive number (it is the larger of the two)
+                    prob += assigned_percentage - percentage <= abs_dev
+                    prob += percentage - assigned_percentage <= abs_dev
+                else:
+                    prob += (
+                        assigned_flow - self.actual_flows[(from_zone, to_zone)]
+                        <= abs_dev
+                    )
+                    prob += (
+                        self.actual_flows[(from_zone, to_zone)] - assigned_flow
+                        <= abs_dev
+                    )
 
-        # Weighted objective function
-        prob += (
-            weight_max_dev * max_dev
-            + weight_total_dev * pulp.lpSum(deviation_vars.values()),
-            "WeightedObjective",
-        )
+                # Update the maximum deviation variable: it is the maximum of all deviations
+                prob += max_dev >= abs_dev
 
+            logger.info("Adding weighted objective to assignment problem")
+            # Weighted objective function
+            prob += (
+                weight_max_dev * max_dev
+                + weight_total_dev * pulp.lpSum(deviation_vars.values()),
+                "WeightedObjective",
+            )
+        else:
+            logger.info("Adding weighted objective to assignment problem")
+            # Weighted objective function
+            prob += (
+                weight_total_dev * pulp.lpSum(deviation_vars.values()),
+                "WeightedObjective",
+            )
+
+        logger.info("Solving assignment problem")
         prob.solve()
 
         if pulp.LpStatus[prob.status] != "Optimal":

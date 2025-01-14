@@ -1,7 +1,6 @@
 import geopandas as gpd
 import pandas as pd
 
-import acbm
 from acbm.assigning.select_zone_primary import (
     fill_missing_zones,
     select_zone,
@@ -11,14 +10,16 @@ from acbm.assigning.utils import (
     cols_for_assignment_edu,
 )
 from acbm.cli import acbm_cli
-from acbm.config import load_config
-from acbm.logger_config import assigning_primary_zones_logger as logger
+from acbm.config import load_and_setup_config
 from acbm.preprocessing import add_locations_to_activity_chains
+from acbm.utils import get_travel_times
 
 
 @acbm_cli
 def main(config_file):
-    config = load_config(config_file)
+    config = load_and_setup_config(config_file)
+    logger = config.get_logger("assigning_primary_zone", __file__)
+
     # TODO: consider if RNG seed needs to be distinct for different assignments
     config.init_rng()
 
@@ -28,28 +29,17 @@ def main(config_file):
 
     # --- Possible zones for each activity (calculated in 3.1_assign_possible_zones.py)
     logger.info("Loading possible zones for each activity")
-    possible_zones_school = pd.read_pickle(
-        acbm.root_path / "data/interim/assigning/possible_zones_education.pkl"
-    )
+    possible_zones_school = pd.read_pickle(config.possible_zones_education)
 
     # --- boundaries
     logger.info("Loading study area boundaries")
-
-    boundaries = gpd.read_file(
-        acbm.root_path / "data/external/boundaries/study_area_zones.geojson"
-    )
-    logger.info("Study area boundaries loaded")
-
-    # Reproject boundaries to the output CRS specified in the config
-    boundaries = boundaries.to_crs(f"epsg:{config.output_crs}")
-    logger.info(f"Boundaries reprojected to {config.output_crs}")
+    boundaries = config.get_study_area_boundaries()
+    logger.info(f"Study area boundaries loaded and reprojected to {config.output_crs}")
 
     # --- osm POI data
     logger.info("Loading OSM POI data")
 
-    osm_data_gdf = pd.read_pickle(
-        acbm.root_path / "data/interim/assigning/osm_poi_with_zones.pkl"
-    )
+    osm_data_gdf = pd.read_pickle(config.osm_poi_with_zones)
     # Convert the DataFrame into a GeoDataFrame, and assign a coordinate reference system (CRS)
     logger.info("Converting OSM POI data to GeoDataFrame")
 
@@ -60,7 +50,9 @@ def main(config_file):
     # --- Activity chains
     logger.info("Loading activity chains")
 
-    activity_chains = activity_chains_for_assignment(columns=cols_for_assignment_edu())
+    activity_chains = activity_chains_for_assignment(
+        config, columns=cols_for_assignment_edu()
+    )
     activity_chains = activity_chains[
         activity_chains["TravDay"] == config.parameters.nts_day_of_week
     ]
@@ -72,7 +64,9 @@ def main(config_file):
 
     # add home location (based on OA11CD from SPC)
     activity_chains_edu = add_locations_to_activity_chains(
-        activity_chains=activity_chains_edu, target_crs=f"EPSG:{config.output_crs}"
+        activity_chains=activity_chains_edu,
+        target_crs=f"EPSG:{config.output_crs}",
+        centroid_layer=pd.read_csv(config.centroid_layer_filepath),
     )
 
     # remove index_right column from activity_chains if it exists
@@ -91,16 +85,12 @@ def main(config_file):
     # --- activities per zone
     logger.info("Loading activities per zone")
 
-    activities_per_zone = pd.read_parquet(
-        acbm.root_path / "data/interim/assigning/activities_per_zone.parquet"
-    )
+    activities_per_zone = pd.read_parquet(config.activities_per_zone)
 
     # --- travel time estimates
     logger.info("Loading travel time estimates")
-
-    travel_time_estimates = pd.read_parquet(
-        acbm.root_path / "data/interim/assigning/travel_time_estimates.parquet"
-    )
+    # TODO: check whether should use_estimates=True
+    travel_time_estimates = get_travel_times(config)
 
     #### ASSIGN TO ZONE FROM FEASIBLE ZONES ####
 
@@ -161,9 +151,7 @@ def main(config_file):
 
     logger.info("Saving activity chains with assigned zones")
 
-    activity_chains_edu.to_pickle(
-        acbm.root_path / "data/interim/assigning/activity_chains_education.pkl"
-    )
+    activity_chains_edu.to_pickle(config.activity_chains_education)
 
 
 if __name__ == "__main__":

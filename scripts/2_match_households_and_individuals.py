@@ -1,17 +1,12 @@
-import os
 import pickle as pkl
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-# from joblib import Parallel, delayed
-# from tqdm import trange
-import acbm
 from acbm.assigning.utils import cols_for_assignment_all
 from acbm.cli import acbm_cli
-from acbm.config import load_config
-from acbm.logger_config import matching_logger as logger
+from acbm.config import load_and_setup_config
 from acbm.matching import MatcherExact, match_individuals
 from acbm.preprocessing import (
     count_per_group,
@@ -25,16 +20,15 @@ from acbm.preprocessing import (
 
 @acbm_cli
 def main(config_file):
-    config = load_config(config_file)
-    config.init_rng()
+    config = load_and_setup_config(config_file)
+    logger = config.get_logger("matching", __file__)
 
     pd.set_option("display.max_columns", None)
 
     def get_interim_path(
-        file_name: str, path: str | Path = acbm.root_path / "data/interim/matching/"
-    ) -> str:
-        os.makedirs(path, exist_ok=True)
-        return f"{path}/{file_name}"
+        file_name: str,
+    ) -> Path:
+        return config.interim_path / "matching" / file_name
 
     # ## Step 1: Load in the datasets
 
@@ -43,10 +37,7 @@ def main(config_file):
     logger.info("Loading SPC data")
 
     # Read in the spc data (parquet format)
-    spc = pd.read_parquet(
-        acbm.root_path / "data/external/spc_output/"
-        f"{config.region}_people_hh.parquet"
-    )
+    spc = pd.read_parquet(config.spc_combined_filepath)
 
     logger.info("Filtering SPC data to specific columns")
     # select columns
@@ -107,20 +98,14 @@ def main(config_file):
     # #### PSU
 
     logger.info("Loading NTS data: PSU table")
-    path_psu = (
-        acbm.root_path / "data/external/nts/UKDA-5340-tab/tab/psu_eul_2002-2022.tab"
-    )
+    path_psu = config.psu_filepath
     psu = pd.read_csv(path_psu, sep="\t")
 
     # #### Individuals
     logger.info("Loading NTS data: individuals table")
 
-    path_individuals = (
-        acbm.root_path
-        / "data/external/nts/UKDA-5340-tab/tab/individual_eul_2002-2022.tab"
-    )
     nts_individuals = pd.read_csv(
-        path_individuals,
+        config.nts_individuals_filepath,
         sep="\t",
         usecols=[
             "IndividualID",
@@ -159,12 +144,8 @@ def main(config_file):
     # #### Households
     logger.info("Loading NTS data: household table")
 
-    path_households = (
-        acbm.root_path
-        / "data/external/nts/UKDA-5340-tab/tab/household_eul_2002-2022.tab"
-    )
     nts_households = pd.read_csv(
-        path_households,
+        config.nts_households_filepath,
         sep="\t",
         usecols=[
             "HouseholdID",
@@ -201,11 +182,8 @@ def main(config_file):
     # #### Trips
     logger.info("Loading NTS data: trips table")
 
-    path_trips = (
-        acbm.root_path / "data/external/nts/UKDA-5340-tab/tab/trip_eul_2002-2022.tab"
-    )
     nts_trips = pd.read_csv(
-        path_trips,
+        config.nts_trips_filepath,
         sep="\t",
         usecols=[
             "TripID",
@@ -524,9 +502,7 @@ def main(config_file):
     # We use the 2011 rural urban classification to match the SPC to the NTS. The NTS has 2 columns that we can use to match to the SPC: `Settlement2011EW_B03ID` and `Settlement2011EW_B04ID`. The `Settlement2011EW_B03ID` column is more general (urban / rural only), while the `Settlement2011EW_B04ID` column is more specific. We stick to the more general column for now.
 
     # read the rural urban classification data
-    rural_urban = pd.read_csv(
-        acbm.root_path / "data/external/census_2011_rural_urban.csv", sep=","
-    )
+    rural_urban = pd.read_csv(config.rural_urban_filepath)
 
     # merge the rural_urban data with the spc
     spc_edited = spc_edited.merge(
@@ -1130,18 +1106,12 @@ def main(config_file):
     )
 
     # save the file as a parquet file
-    spc_edited_copy.to_parquet(get_interim_path("spc_with_nts_trips.parquet"))
+    spc_edited_copy.to_parquet(config.spc_with_nts_trips_filepath)
 
     # save the nts data for later use in validation
-    nts_individuals.to_parquet(
-        acbm.root_path / "data/external/nts/filtered/nts_individuals.parquet"
-    )
-    nts_households.to_parquet(
-        acbm.root_path / "data/external/nts/filtered/nts_households.parquet"
-    )
-    nts_trips.to_parquet(
-        acbm.root_path / "data/external/nts/filtered/nts_trips.parquet"
-    )
+    nts_individuals.to_parquet(config.output_path / "nts_individuals.parquet")
+    nts_households.to_parquet(config.output_path / "nts_households.parquet")
+    nts_trips.to_parquet(config.output_path / "nts_trips.parquet")
 
 
 if __name__ == "__main__":

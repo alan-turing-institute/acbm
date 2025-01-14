@@ -2,25 +2,22 @@ import geopandas as gpd
 import pandas as pd
 from libpysal.weights import Queen
 
-import acbm
 from acbm.assigning.plots import plot_desire_lines, plot_scatter_actual_reported
 from acbm.assigning.select_facility import map_activity_locations, select_facility
 from acbm.cli import acbm_cli
-from acbm.config import load_config
-from acbm.logger_config import assigning_facility_locations_logger as logger
+from acbm.config import load_and_setup_config
+from acbm.utils import get_travel_times
 
 
 @acbm_cli
 def main(config_file):
-    config = load_config(config_file)
-    config.init_rng()
+    config = load_and_setup_config(config_file)
+    logger = config.get_logger("assigning_facility_locations", __file__)
 
     # --- Load data: activity chains
     logger.info("Loading activity chains")
 
-    activity_chains = pd.read_csv(
-        acbm.root_path / "data/processed/activities_pam/legs.csv"
-    )
+    activity_chains = pd.read_csv(config.output_path / "legs.csv")
     activity_chains = activity_chains.drop(columns=["Unnamed: 0", "freq"])
 
     # --- Preprocess: Split activity chains by activity purpose
@@ -44,23 +41,12 @@ def main(config_file):
     # --- Load data: POI locations
     logger.info("Loading facility data")
 
-    osm_data_gdf = gpd.read_parquet(
-        acbm.root_path
-        / f"data/interim/osmox/{config.region}_epsg_{config.output_crs}.parquet"
-    )
+    osm_data_gdf = gpd.read_parquet(config.osm_path)
 
     # --- Load data: Boundaries
     logger.info("Loading study area boundaries")
-
-    boundaries = gpd.read_file(
-        acbm.root_path / "data/external/boundaries/study_area_zones.geojson"
-    )
-
-    logger.info("Study area boundaries loaded")
-
-    # Reproject boundaries to the output CRS specified in the config
-    boundaries = boundaries.to_crs(f"epsg:{config.output_crs}")
-    logger.info(f"Boundaries reprojected to {config.output_crs}")
+    boundaries = config.get_study_area_boundaries()
+    logger.info(f"Study area boundaries loaded and reprojected to {config.output_crs}")
 
     # --- Prepprocess: add zone column to POI data
     logger.info("Adding zone column to POI data")
@@ -144,7 +130,7 @@ def main(config_file):
     logger.info("a. Adding eduction type as fallback")
     # load in activity chains
     spc_with_nts = pd.read_parquet(
-        acbm.root_path / "data/interim/matching/spc_with_nts_trips.parquet",
+        config.spc_with_nts_trips_filepath,
         columns=["id", "education_type", "seq", "TripTotalTime", "TripDisIncSW"],
     )
     # we get one row per id
@@ -291,7 +277,7 @@ def main(config_file):
             lambda point: point if pd.isna(point) else point.wkt
         )
     activity_chains_all.drop(columns=geom_cols).to_parquet(
-        acbm.root_path / "data/processed/activities_pam/legs_with_locations.parquet"
+        config.output_path / "legs_with_locations.parquet"
     )
 
     # --- Plots
@@ -324,7 +310,7 @@ def main(config_file):
             y_label="Actual Distance - Euclidian (km)",
             crs=f"EPSG:{config.output_crs}",
             title_prefix=f"Scatter plot of TripDisIncSW vs. Length for {activity_type}",
-            save_dir=acbm.root_path / "data/processed/plots/assigning/",
+            save_dir=config.output_path / "plots/assigning/",
         )
 
     # Plot 2: Euclidian travel distance vs reported (NTS) travel TIME
@@ -348,9 +334,32 @@ def main(config_file):
             y_label="Actual Distance - Euclidian (km)",
             crs=f"EPSG:{config.output_crs}",
             title_prefix="Scatter plot of TripTotalTime vs. Length",
-            save_dir=acbm.root_path / "data/processed/plots/assigning/",
+            save_dir=config.output_path / "plots/assigning/",
         )
 
+    # Add travel times
+    tte = get_travel_times(config)
+    activity_chains_all = activity_chains_all.merge(
+        tte[[tte.columns[0], tte.columns[1], "mode", "time"]],
+        left_on=["ozone", "dzone", "mode"],
+        right_on=[tte.columns[0], tte.columns[1], "mode"],
+        how="left",
+    )
+    # Iterate over each unique activity type and create a plot
+    for activity_type in unique_activity_types:
+        plot_scatter_actual_reported(
+            activities=activity_chains_all,
+            activity_type=activity_type,
+            activity_type_col="destination activity",
+            x_col="TripTotalTime",
+            y_col="time",
+            x_label="Reported Travel TIme (min)",
+            y_label="Modelled time (min)",
+            crs=f"EPSG:{config.output_crs}",
+            title_prefix="Scatter plot of TripTotalTime vs. Modelled time",
+            save_dir=config.output_path / "plots/assigning/",
+            y_scale=1.0,
+        )
     # ....
 
     # Plot 3: Desire lines between start and end locations
@@ -365,7 +374,7 @@ def main(config_file):
             boundaries=boundaries,
             sample_size=1000,
             crs=f"EPSG:{config.output_crs}",
-            save_dir=acbm.root_path / "data/processed/plots/assigning/",
+            save_dir=config.output_path / "plots/assigning/",
         )
 
 

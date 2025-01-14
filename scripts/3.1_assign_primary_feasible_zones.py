@@ -3,7 +3,6 @@ import pickle as pkl
 import geopandas as gpd
 import pandas as pd
 
-import acbm
 from acbm.assigning.feasible_zones_primary import get_possible_zones
 from acbm.assigning.utils import (
     activity_chains_for_assignment,
@@ -13,21 +12,20 @@ from acbm.assigning.utils import (
     zones_to_time_matrix,
 )
 from acbm.cli import acbm_cli
-from acbm.config import load_config
-from acbm.logger_config import assigning_primary_feasible_logger as logger
+from acbm.config import load_and_setup_config
 from acbm.preprocessing import add_locations_to_activity_chains
 
 
 @acbm_cli
 def main(config_file):
-    config = load_config(config_file)
-    config.init_rng()
+    config = load_and_setup_config(config_file)
+    logger = config.get_logger("assigning_primary_feasible", __file__)
 
     #### LOAD DATA ####
 
     # --- Activity chains
     logger.info("Loading activity chains")
-    activity_chains = activity_chains_for_assignment()
+    activity_chains = activity_chains_for_assignment(config)
     logger.info("Activity chains loaded")
 
     # Filter to a specific day of the week
@@ -39,16 +37,8 @@ def main(config_file):
     # --- Study area boundaries
 
     logger.info("Loading study area boundaries")
-
-    boundaries = gpd.read_file(
-        acbm.root_path / "data/external/boundaries/study_area_zones.geojson"
-    )
-
-    logger.info("Study area boundaries loaded")
-
-    # Reproject boundaries to the output CRS specified in the config
-    boundaries = boundaries.to_crs(f"epsg:{config.output_crs}")
-    logger.info(f"Boundaries reprojected to {config.output_crs}")
+    boundaries = config.get_study_area_boundaries()
+    logger.info(f"Study area boundaries loaded and reprojected to {config.output_crs}")
 
     # --- Assign activity home locations to boundaries zoning system
 
@@ -56,7 +46,9 @@ def main(config_file):
 
     # add home location (based on OA11CD from SPC)
     activity_chains = add_locations_to_activity_chains(
-        activity_chains=activity_chains, target_crs=f"EPSG:{config.output_crs}"
+        activity_chains=activity_chains,
+        target_crs=f"EPSG:{config.output_crs}",
+        centroid_layer=pd.read_csv(config.centroid_layer_filepath),
     )
 
     # remove index_right column from activity_chains if it exists
@@ -87,19 +79,12 @@ def main(config_file):
     logger.info("Travel time estimates created")
 
     # save travel_time_etstimates as parquet
-    travel_time_estimates.to_parquet(
-        acbm.root_path / "data/interim/assigning/travel_time_estimates.parquet"
-    )
+    travel_time_estimates.to_parquet(config.travel_times_estimates_filepath)
 
     if config.parameters.travel_times:
         logger.info("Loading travel time matrix")
-        # TODO: move to config
-        travel_time_matrix_path = (
-            acbm.root_path
-            / f"data/external/travel_times/{config.boundary_geography}/travel_time_matrix.parquet"
-        )
         try:
-            travel_times = pd.read_parquet(travel_time_matrix_path)
+            travel_times = pd.read_parquet(config.travel_times_filepath)
             print("Travel time matrix loaded successfully.")
         except Exception as e:
             logger.info(
@@ -128,7 +113,7 @@ def main(config_file):
     intrazone_times = intrazone_time(zones=boundaries, key_column=config.zone_id)
 
     # save intrazone_times to pickle
-    with open(acbm.root_path / "data/interim/assigning/intrazone_times.pkl", "wb") as f:
+    with open(config.interim_path / "assigning" / "intrazone_times.pkl", "wb") as f:
         pkl.dump(intrazone_times, f)
 
     logger.info("Intrazonal travel time estimates created")
@@ -152,10 +137,7 @@ def main(config_file):
     logger.info("Loading activity locations")
 
     # osm data
-    osm_data = gpd.read_parquet(
-        acbm.root_path
-        / f"data/interim/osmox/{config.region}_epsg_{config.output_crs}.parquet"
-    )
+    osm_data = gpd.read_parquet(config.osm_path)
 
     logger.info("Activity locations loaded")
     # remove rows with activities = home OR transit
@@ -182,9 +164,7 @@ def main(config_file):
         predicate="within",
     )
     # save as pickle
-    osm_data_gdf.to_pickle(
-        acbm.root_path / "data/interim/assigning/osm_poi_with_zones.pkl"
-    )
+    osm_data_gdf.to_pickle(config.osm_poi_with_zones)
 
     activities_per_zone = get_activities_per_zone(
         zones=boundaries,
@@ -193,9 +173,7 @@ def main(config_file):
         return_df=True,
     )
 
-    activities_per_zone.to_parquet(
-        acbm.root_path / "data/interim/assigning/activities_per_zone.parquet"
-    )
+    activities_per_zone.to_parquet(config.activities_per_zone)
 
     #### Get possible zones for each primary activity
 
@@ -222,14 +200,14 @@ def main(config_file):
         zone_id=config.zone_id,
         filter_by_activity=True,
         activity_col="education_type",
-        time_tolerance=0.3,
+        time_tolerance=config.parameters.tolerance_edu
+        if config.parameters.tolerance_edu is not None
+        else 0.3,
     )
 
     logger.info("Saving feasible zones for education activities")
     # save possible_zones_school to dictionary
-    with open(
-        acbm.root_path / "data/interim/assigning/possible_zones_education.pkl", "wb"
-    ) as f:
+    with open(config.possible_zones_education, "wb") as f:
         pkl.dump(possible_zones_school, f)
 
     del possible_zones_school
@@ -249,15 +227,15 @@ def main(config_file):
         zone_id=config.zone_id,
         filter_by_activity=True,
         activity_col="dact",
-        time_tolerance=0.3,
+        time_tolerance=config.parameters.tolerance_work
+        if config.parameters.tolerance_work is not None
+        else 0.3,
     )
 
     logger.info("Saving feasible zones for work activities")
 
     # save possible_zones_work to dictionary
-    with open(
-        acbm.root_path / "data/interim/assigning/possible_zones_work.pkl", "wb"
-    ) as f:
+    with open(config.possible_zones_work, "wb") as f:
         pkl.dump(possible_zones_work, f)
 
     del possible_zones_work

@@ -14,7 +14,6 @@ from pam import write
 from pam.planner.od import ODFactory, ODMatrix
 from pam.read import load_travel_diary
 
-import acbm
 from acbm.assigning.select_zone_secondary import (
     create_od_matrices,
     shift_and_fill_column,
@@ -24,44 +23,42 @@ from acbm.assigning.utils import (
     activity_chains_for_assignment,
 )
 from acbm.cli import acbm_cli
-from acbm.config import load_config
-from acbm.logger_config import assigning_secondary_zones_logger as logger
+from acbm.config import load_and_setup_config
 from acbm.preprocessing import add_locations_to_activity_chains
+from acbm.utils import get_travel_times
 
 
 @acbm_cli
 def main(config_file):
-    config = load_config(config_file)
-    config.init_rng()
+    config = load_and_setup_config(config_file)
+    logger = config.get_logger("assigning_secondary_zone", __file__)
+
     zone_id = config.zone_id
 
     # --- Load in the data
     logger.info("Loading: activity chains")
 
-    activity_chains = activity_chains_for_assignment()
+    activity_chains = activity_chains_for_assignment(config)
     activity_chains = activity_chains[
         activity_chains["TravDay"] == config.parameters.nts_day_of_week
     ]
 
+    # TODO: remove obsolete comment
     # --- Add OA21CD to the data
+    # logger.info("Preprocessing: Adding OA21CD to the data")
 
-    logger.info("Preprocessing: Adding OA21CD to the data")
-
-    boundaries = gpd.read_file(
-        acbm.root_path / "data/external/boundaries/study_area_zones.geojson"
-    )
-    # Reproject boundaries to the output CRS specified in the config
-    boundaries = boundaries.to_crs(f"epsg:{config.output_crs}")
-    logger.info(f"Boundaries reprojected to {config.output_crs}")
-
-    logger.info("Study area boundaries loaded")
+    logger.info("Loading study area boundaries")
+    boundaries = config.get_study_area_boundaries()
+    logger.info(f"Study area boundaries loaded and reprojected to {config.output_crs}")
 
     # --- Assign activity home locations to boundaries zoning system
 
     logger.info("Assigning activity home locations to boundaries zoning system")
     # add home location (based on OA11CD from SPC)
     activity_chains = add_locations_to_activity_chains(
-        activity_chains=activity_chains, target_crs=f"EPSG:{config.output_crs}"
+        activity_chains=activity_chains,
+        target_crs=f"EPSG:{config.output_crs}",
+        centroid_layer=pd.read_csv(config.centroid_layer_filepath),
     )
 
     # remove index_right column from activity_chains if it exists
@@ -98,15 +95,12 @@ def main(config_file):
         )
 
     activity_chains_edu = merge_columns_from_other(
-        pd.read_pickle(
-            acbm.root_path / "data/interim/assigning/activity_chains_education.pkl"
-        ),
+        pd.read_pickle(config.activity_chains_education),
         activity_chains,
     )
     activity_chains_work = merge_columns_from_other(
-        pd.read_pickle(
-            acbm.root_path / "data/interim/assigning/activity_chains_work.pkl"
-        ),
+        # TODO: update with config path
+        pd.read_pickle(config.activity_chains_work),
         activity_chains,
     )
 
@@ -304,16 +298,7 @@ def main(config_file):
     logger.info("Analysis (matrices): Step 1 - Loading travel time data")
 
     # load in the travel times (path differs for estimated ones)
-    # TODO: improve / save in same directory / add paths to config
-    if config.parameters.travel_times:
-        travel_times = pd.read_parquet(
-            acbm.root_path
-            / f"data/external/travel_times/{config.boundary_geography}/travel_time_matrix.parquet"
-        )
-    else:
-        travel_times = pd.read_parquet(
-            acbm.root_path / "data/interim/assigning/travel_time_estimates.parquet"
-        )
+    travel_times = get_travel_times(config)
 
     # Edit modes
     logger.info("Analysis (matrices): Step 2 - Editing modes")
@@ -345,9 +330,7 @@ def main(config_file):
     # --- Calculate OD probabilities (probabilities of choosing a destination zone for an activity, given the origin zone)
     logger.info("Analysis (matrices): Step 3 - Calculating OD probabilities")
 
-    activities_per_zone = pd.read_parquet(
-        acbm.root_path / "data/interim/assigning/activities_per_zone.parquet"
-    )
+    activities_per_zone = pd.read_parquet(config.activities_per_zone)
 
     # keep only rows that don't match primary activities
     activities_per_zone = activities_per_zone[
@@ -446,7 +429,7 @@ def main(config_file):
     # --- Save
     logger.info("Saving: Step 7 - Saving population")
 
-    write.to_csv(population, dir=(acbm.root_path / "data/processed/activities_pam"))
+    write.to_csv(population, dir=config.output_path)
 
 
 if __name__ == "__main__":

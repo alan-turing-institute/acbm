@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 
 import geopandas as gpd
@@ -13,10 +14,11 @@ from acbm.assigning.utils import (
     zones_to_time_matrix,
 )
 from acbm.config import Config
-from acbm.logger_config import assigning_primary_feasible_logger as logger
 
 pandarallel.initialize(progress_bar=True)
 
+
+logger = logging.getLogger("assigning_primary_feasible")
 
 # --- Schemas for validation
 
@@ -128,8 +130,8 @@ def get_possible_zones(
         travel_times = input_schemas["travel_times"].validate(travel_times, lazy=True)
 
     except SchemaErrors as e:
-        print("Validation failed with errors:")
-        print(e.failure_cases)  # prints all the validation errors at once
+        logger.error("Validation failed with errors:")
+        logger.error(e.failure_cases)  # prints all the validation errors at once
         return None
 
     if travel_times is None:
@@ -139,7 +141,7 @@ def get_possible_zones(
         )
 
     list_of_modes = activity_chains["mode"].unique()
-    print(f"Unique modes found in the dataset are: {list_of_modes}")
+    logger.info(f"Unique modes found in the dataset are: {list_of_modes}")
 
     # use map_day_to_wkday_binary to identify if activity is on a weekday or weekend
     activity_chains["weekday"] = activity_chains["TravDay"].apply(
@@ -157,7 +159,7 @@ def get_possible_zones(
 
     # loop over the list of modes
     for mode in list_of_modes:
-        print(f"Processing mode: {mode}")
+        logger.info(f"Processing mode: {mode}")
         # filter the travel_times dataframe to only include rows with the current mode
         travel_times_filtered_mode = travel_times[travel_times["mode"] == mode]
 
@@ -174,9 +176,9 @@ def get_possible_zones(
             and "weekday" in travel_times.columns
         ):
             for time_of_day in list_of_times_of_day:
-                print(f"Processing time of day: {time_of_day} | mode: {mode}")
+                logger.info(f"Processing time of day: {time_of_day} | mode: {mode}")
                 for day_type in day_types:
-                    print(
+                    logger.info(
                         f"Processing time of day: {time_of_day} | weekday: {day_type} | mode: {mode}"
                     )
                     # filter the travel_times dataframe to only include rows with the current time_of_day and weekday
@@ -184,10 +186,8 @@ def get_possible_zones(
                         (travel_times_filtered_mode["weekday"] == day_type)
                         & (travel_times_filtered_mode["time_of_day"] == time_of_day)
                     ]
-                    print(
-                        "unique modes after filtering are",
-                        travel_times_filtered_mode_time_day["mode"].unique(),
-                    )
+                    unique_modes = travel_times_filtered_mode_time_day["mode"].unique()
+                    logger.info(f"unique modes after filtering are: {unique_modes}")
 
                     # filter the activity chains to the current mode, time_of_day and weekday
                     activity_chains_filtered = activity_chains[
@@ -299,7 +299,6 @@ def _get_possible_zones(
     dict
         A dictionary with the origin zone as the key and a list of possible destination zones as the value
     """
-
     # get the travel time
     travel_time = activity["TripTotalTime"]
     # get the origin zone
@@ -328,6 +327,7 @@ def _get_possible_zones(
                 filtered_activities_per_zone[zone_id]
             )
         ]
+
     # how many zones are reachable?
     logger.debug(
         f"Activity {activity.id}: Number of zones with activity {activity_purpose} \
@@ -345,6 +345,7 @@ def _get_possible_zones(
             <= travel_time + time_tolerance * travel_time
         )
     ]
+
     logger.debug(
         f"Activity {activity.id}: Number of zones with activity {activity_purpose} within threshold of reported time {travel_time}: \
             {len(travel_times_filtered_time)}"

@@ -1,0 +1,42 @@
+[parameters]
+seed = 0
+region = "leeds"
+zone_id = "OA21CD"
+travel_times = false
+boundary_geography = "OA"
+nts_years = [2019, 2021, 2022]
+nts_regions = [
+    'Yorkshire and the Humber',
+    'North West',
+    'North East',
+    'East Midlands',
+    'West Midlands',
+    'East of England',
+    'South East',
+    'South West',
+]
+nts_day_of_week = 3
+output_crs = 4326
+
+[work_assignment]
+use_percentages = false
+weight_max_dev = 0.0
+weight_total_dev = 1.0
+max_zones = 4
+commute_level = "OA"
+
+[matching]
+required_columns = ["number_adults", "number_children"]
+optional_columns = [
+    "number_cars",
+    "num_pension_age",
+    "rural_urban_2_categories",
+    "employment_status",
+    "tenure_status",
+]
+n_matches = 10
+chunk_size = 50000
+
+[postprocessing]
+pam_jitter = 30
+pam_min_duration = 10

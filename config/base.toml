@@ -48,3 +48,15 @@ max_zones = 8          # maximum number of feasible zones to include in the opti
 [postprocessing]
 pam_jitter = 30
 pam_min_duration = 10
+# for get_pt_subscription: everyone above this age has a subscription (pensioners get free travel)
+# TODO: more sophisticated approach
+pt_subscription_age = 66
+# to define if a person is a student:
+# eveyone below this age is a student
+student_age_base = 16
+# everyone below this age that has at least one "education" activity is a student
+student_age_upper = 30
+# eveyone who uses one of the modes below is classified as a passenger (isPassenger = True)
+modes_passenger =  ['car_passenger', 'taxi']
+# yearly state pension: for getting hhlIncome of pensioners
+state_pension = 11502
