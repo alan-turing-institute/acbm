@@ -294,3 +294,62 @@ def match_individuals(
         matches.update(match)
 
     return matches
+
+
+def match_remaining_individuals(
+    df1: pd.DataFrame,
+    df2: pd.DataFrame,
+    matching_columns: list,
+    remaining_ids: list[int],
+    show_progress: bool = False,
+) -> dict:
+    """
+    Apply a matching function iteratively to members of each household.
+    In each iteration, filter df1 and df2 to the household ids of item i
+    in matches_hh, and then apply the matching function to the filtered DataFrames.
+
+    Parameters
+    ----------
+    df1: pandas DataFrame
+        The first DataFrame to be matched on
+    df2: pandas DataFrame
+        The second DataFrame to be matched with
+    matching_columns: list
+        The columns to be used for the matching
+    matches_hh: dict
+        A dictionary with the matched household ids {df1_id: df2_id}
+    show_progress: bool
+        Whether to print the progress of the matching to the console
+
+    Returns
+    -------
+    matches: dict
+        A dictionary with the matched row indeces from the two DataFrames {df1: df2}
+
+    """
+    # Initialize an empty dic to store the matches
+    matches = {}
+
+    # loop over all groups of df1_id
+    # note: for large populations looping through the groups (keys) of the
+    # large dataframe (assumed to be df1) is more efficient than looping
+    # over keys and subsetting on a key in each iteration.
+    df1_remaining = df1.loc[df1["id"].isin(remaining_ids)]
+    chunk_size = 1000
+    for i, rows_df1 in df1_remaining.groupby(
+        np.arange(len(df1_remaining)) // chunk_size
+    ):
+        rows_df2 = df2
+        if show_progress:
+            # Print the iteration number and the number of keys in the dict
+            print(
+                f"Matching remaining individuals, {i * chunk_size} out of: {len(remaining_ids)}"
+            )
+
+        # apply the matching
+        match = match_psm(rows_df1, rows_df2, matching_columns)
+
+        # append the results to the main dict
+        matches.update(match)
+
+    return matches

@@ -25,7 +25,7 @@ logger = logging.getLogger("assigning_primary_feasible")
 activity_chains_schema = DataFrameSchema(
     {
         "mode": Column(str),
-        "TravDay": Column(pa.Float, Check.isin([1, 2, 3, 4, 5, 6, 7]), nullable=True),
+        # "TravDay": Column(pa.Float, Check.isin([1, 2, 3, 4, 5, 6, 7]), nullable=True),
         "tst": Column(pa.Float, Check.less_than_or_equal_to(1440), nullable=True),
         "TripTotalTime": Column(pa.Float, nullable=True),
         # TODO: add more columns ...

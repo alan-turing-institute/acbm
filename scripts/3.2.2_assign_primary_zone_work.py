@@ -42,11 +42,9 @@ def main(config_file):
 
     # --- Activity chains
     logger.info("Loading activity chains")
-
-    activity_chains = activity_chains_for_assignment(config, cols_for_assignment_work())
-    activity_chains = activity_chains[
-        activity_chains["TravDay"] == config.parameters.nts_day_of_week
-    ]
+    activity_chains = activity_chains_for_assignment(
+        config, cols_for_assignment_work(), subset_to_chosen_day=True
+    )
 
     logger.info("Filtering activity chains for trip purpose: work")
     activity_chains_work = activity_chains[activity_chains["dact"] == "work"]

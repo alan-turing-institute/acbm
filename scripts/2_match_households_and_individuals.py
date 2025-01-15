@@ -7,7 +7,7 @@ import pandas as pd
 from acbm.assigning.utils import cols_for_assignment_all
 from acbm.cli import acbm_cli
 from acbm.config import load_and_setup_config
-from acbm.matching import MatcherExact, match_individuals
+from acbm.matching import MatcherExact, match_individuals, match_remaining_individuals
 from acbm.preprocessing import (
     count_per_group,
     nts_filter_by_region,
@@ -15,6 +15,10 @@ from acbm.preprocessing import (
     num_adult_child_hh,
     transform_by_group,
     truncate_values,
+)
+from acbm.utils import (
+    households_with_common_travel_days,
+    households_with_travel_days_in_nts_weeks,
 )
 
 
@@ -222,14 +226,17 @@ def main(config_file):
 
     logger.info("Filtering NTS data by specified year(s)")
 
+    logger.info(f"Total NTS households: {nts_households.shape[0]:,.0f}")
     years = config.parameters.nts_years
 
     nts_individuals = nts_filter_by_year(nts_individuals, psu, years)
     nts_households = nts_filter_by_year(nts_households, psu, years)
     nts_trips = nts_filter_by_year(nts_trips, psu, years)
 
+    logger.info(
+        f"Total NTS households (after year filtering): {nts_households.shape[0]:,.0f}"
+    )
     # #### Filter by geography
-    #
 
     regions = config.parameters.nts_regions
 
@@ -237,8 +244,30 @@ def main(config_file):
     nts_households = nts_filter_by_region(nts_households, psu, regions)
     nts_trips = nts_filter_by_region(nts_trips, psu, regions)
 
-    # Create dictionaries of key value pairs
+    logger.info(
+        f"Total NTS households (after region filtering): {nts_households.shape[0]:,.0f}"
+    )
 
+    # Ensure that the households have at least one day in `nts_days_of_week` that
+    # all household members have trips for
+    if config.parameters.common_household_day:
+        hids = households_with_common_travel_days(
+            nts_trips, config.parameters.nts_days_of_week
+        )
+    else:
+        hids = households_with_travel_days_in_nts_weeks(
+            nts_trips, config.parameters.nts_days_of_week
+        )
+
+    # Subset individuals and households given filtering of trips
+    nts_trips = nts_trips[
+        nts_trips["HouseholdID"].isin(hids)
+        & nts_trips["TravDay"].isin(config.parameters.nts_days_of_week)
+    ]
+    nts_individuals = nts_individuals[nts_individuals["HouseholdID"].isin(hids)]
+    nts_households = nts_households[nts_households["HouseholdID"].isin(hids)]
+
+    # Create dictionaries of key value pairs
     """
     guide to the dictionaries:
 
@@ -923,6 +952,19 @@ def main(config_file):
             matches_hh=matches_hh_level_sample,
             show_progress=True,
         )
+
+        # match remaining individuals
+        remaining_ids = spc_edited.loc[
+            ~spc_edited.index.isin(matches_ind.keys()), "id"
+        ].to_list()
+        matches_remaining_ind = match_remaining_individuals(
+            df1=spc_edited,
+            df2=nts_individuals,
+            matching_columns=["age_group", "sex"],
+            remaining_ids=remaining_ids,
+            show_progress=True,
+        )
+        matches_ind.update(matches_remaining_ind)
 
         # save random sample
         with open(

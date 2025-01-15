@@ -20,7 +20,7 @@ nts_regions = [
 ]
 # nts day of the week to use
 # 1: Monday, 2: Tuesday, 3: Wednesday, 4: Thursday, 5: Friday, 6: Saturday, 7: Sunday
-nts_day_of_week = 3
+nts_days_of_week = [3]
 # what crs do we want the output to be in? (just add the number, e.g. 3857)
 output_crs = 3857
 

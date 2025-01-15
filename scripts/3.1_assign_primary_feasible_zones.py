@@ -7,6 +7,7 @@ from acbm.assigning.feasible_zones_primary import get_possible_zones
 from acbm.assigning.utils import (
     activity_chains_for_assignment,
     get_activities_per_zone,
+    get_chosen_day,
     intrazone_time,
     replace_intrazonal_travel_time,
     zones_to_time_matrix,
@@ -28,11 +29,15 @@ def main(config_file):
     activity_chains = activity_chains_for_assignment(config)
     logger.info("Activity chains loaded")
 
-    # Filter to a specific day of the week
     logger.info("Filtering activity chains to a specific day of the week")
-    activity_chains = activity_chains[
-        activity_chains["TravDay"] == config.parameters.nts_day_of_week
-    ]
+
+    # Generate random sample of days by household
+    get_chosen_day(config).to_parquet(
+        config.output_path / "interim" / "assigning" / "chosen_trav_day.parquet"
+    )
+
+    # Filter to chosen day
+    activity_chains = activity_chains_for_assignment(config, subset_to_chosen_day=True)
 
     # --- Study area boundaries
 

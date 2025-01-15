@@ -70,11 +70,10 @@ def nts_filter_by_year(
 
     data: pandas DataFrame
         The NTS data to be filtered
-    psu: pandas DataFrame
-        The Primary Sampling Unit table in the NTS. It has the year
     years: list
         The chosen year(s)
     """
+    # return data.loc[data["SurveyYear"].isin(years)]
     # Check that all values of 'years' exist in the 'SurveyYear' column of 'psu'
 
     # Get the unique years in the 'SurveyYear' column of 'psu'
@@ -111,24 +110,49 @@ def nts_filter_by_region(
     # 1. Create a column in the PSU table with the region names
 
     # Dictionary of the regions in the NTS and how they are coded
+    # PSUGOR_B02ID but does not have values for 2021 and 2022
+    # region_dict = {
+    #     -10.0: "DEAD",
+    #     -9.0: "DNA",
+    #     -8.0: "NA",
+    #     1.0: "North East",
+    #     2.0: "North West",
+    #     3.0: "Yorkshire and the Humber",
+    #     4.0: "East Midlands",
+    #     5.0: "West Midlands",
+    #     6.0: "East of England",
+    #     7.0: "London",
+    #     8.0: "South East",
+    #     9.0: "South West",
+    #     10.0: "Wales",
+    #     11.0: "Scotland",
+    # }
+
+    # PSUStatsReg_B01ID but does not have values for 2021 and 2022
     region_dict = {
         -10.0: "DEAD",
         -9.0: "DNA",
         -8.0: "NA",
-        1.0: "North East",
-        2.0: "North West",
-        3.0: "Yorkshire and the Humber",
-        4.0: "East Midlands",
-        5.0: "West Midlands",
-        6.0: "East of England",
-        7.0: "London",
-        8.0: "South East",
+        1.0: "Northern, Metropolitan",
+        2.0: "Northern, Non-metropolitan",
+        3.0: "Yorkshire / Humberside, Metropolitan",
+        4.0: "Yorkshire / Humberside, Non-metropolitan",
+        5.0: "East Midlands",
+        6.0: "East Anglia",
+        7.0: "South East (excluding London Boroughs)",
+        8.0: "London Boroughs",
         9.0: "South West",
-        10.0: "Wales",
-        11.0: "Scotland",
+        10.0: "West Midlands, Metropolitan",
+        11.0: "West Midlands, Non-metropolitan",
+        12.0: "North West, Metropolitan",
+        13.0: "North West, Non-metropolitan",
+        14.0: "Wales",
+        15.0: "Scotland",
     }
+
     # In the PSU table, create a column with the region names
-    psu["region_name"] = psu["PSUGOR_B02ID"].map(region_dict)
+    # psu["region_name"] = psu["PSUGOR_B02ID"].map(region_dict)
+    psu["region_name"] = psu["PSUStatsReg_B01ID"].map(region_dict)
 
     # 2. Check that all values of 'years' exist in the 'SurveyYear' column of 'psu'
 

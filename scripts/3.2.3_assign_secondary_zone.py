@@ -38,10 +38,7 @@ def main(config_file):
     # --- Load in the data
     logger.info("Loading: activity chains")
 
-    activity_chains = activity_chains_for_assignment(config)
-    activity_chains = activity_chains[
-        activity_chains["TravDay"] == config.parameters.nts_day_of_week
-    ]
+    activity_chains = activity_chains_for_assignment(config, subset_to_chosen_day=True)
 
     # TODO: remove obsolete comment
     # --- Add OA21CD to the data

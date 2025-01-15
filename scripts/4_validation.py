@@ -29,7 +29,7 @@ def main(config_file):
     # NTS data
     legs_nts = pd.read_parquet(config.output_path / "nts_trips.parquet")
 
-    legs_nts = legs_nts[legs_nts["TravDay"] == config.parameters.nts_day_of_week]
+    legs_nts = legs_nts[legs_nts["TravDay"].isin(config.parameters.nts_days_of_week)]
 
     # Model outputs
     legs_acbm = pd.read_csv(config.output_path / "legs.csv")
